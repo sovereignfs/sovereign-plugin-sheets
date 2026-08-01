@@ -247,7 +247,7 @@ actions), `EmptyState` (no-workbooks state).
   "icon": "icon.svg",
   "database": { "isolation": "isolated", "dialect": "sqlite" },
   "permissions": ["auth:session", "db:readWrite", "data:export", "activity:write"],
-  "repository": "https://github.com/sovereignfs/sovereign-sheets",
+  "repository": "https://github.com/sovereignfs/sovereign-plugin-sheets",
   "compatibility": { "minPlatformVersion": "0.42.0" }
 }
 ```

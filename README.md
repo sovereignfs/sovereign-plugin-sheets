@@ -26,7 +26,7 @@ Sovereign account; data is stored on and synced through your instance server.
 ## Installing on a Sovereign instance
 
 ```bash
-sv plugin add https://github.com/sovereignfs/sovereign-sheets
+sv plugin add https://github.com/sovereignfs/sovereign-plugin-sheets
 ```
 
 Then restart the runtime. Sheets will appear in the launcher as **Sheets**.
