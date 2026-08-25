@@ -103,4 +103,4 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.1.0** (unreleased — planning stage)
+Current version: **0.1.3** (MVP shipped — see ROADMAP.md)
