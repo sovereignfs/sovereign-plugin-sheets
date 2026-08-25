@@ -22,7 +22,7 @@ Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 | Plugin ID     | `fs.sovereign.sheets`          |
 | Route prefix  | `/sheets`                      |
 | Database      | `isolated` — own SQLite file, no slug-prefix required |
-| Permissions   | `auth:session`, `db:readWrite`, `data:export`, `activity:write` |
+| Permissions   | `auth:session`, `db:readWrite` |
 | Min platform  | `0.42.0`                       |
 
 ## MVP scope discipline
