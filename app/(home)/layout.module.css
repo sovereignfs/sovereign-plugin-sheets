@@ -1,0 +1,8 @@
+/* Gives ThreeColumnLayout's `height: 100%` a resolvable ancestor. Carries
+   `data-plugin-fullbleed` (see layout.tsx) since this plugin's manifest uses
+   `shell: "default"` — the platform shell only hard-locks a definite
+   viewport height for fullbleed-opted-in plugins (runtime/app/(platform)/shell.module.css).
+   Same precedent as sovereign-plugin-tasks' `DesktopTasksShell.tsx`. */
+.homeFrame {
+  height: 100%;
+}

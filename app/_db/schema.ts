@@ -1,5 +1,5 @@
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm';
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
  * Runtime query schema for Sheets.
@@ -48,6 +48,38 @@ export const sheets = sqliteTable(
 );
 
 /**
+ * Workbook-level sharing — shaped like Docs' `docs_folder_members` (a role
+ * grants access to every child resource; here, every sheet tab in the
+ * workbook, since Sheets has no nested-folder structure to put sharing at a
+ * different level). Seeded with an `owner` row for the creator alongside
+ * every `workbooks` insert; `workbooks.ownerUserId` stays as the immutable
+ * creator record, access control lives entirely here.
+ *
+ * `lastOpenedAt` lives here, per (workbook, user) — not on `workbooks`
+ * itself — since a workbook is shared: "recently opened" must track each
+ * member's own access, not whichever member opened it most recently
+ * instance-wide. Bumped in `getWorkbook()` for the current user's own row.
+ */
+export const workbookMembers = sqliteTable(
+  'workbook_members',
+  {
+    workbookId: text('workbook_id')
+      .notNull()
+      .references(() => workbooks.id),
+    userId: text('user_id').notNull(),
+    tenantId: text('tenant_id').notNull(),
+    role: text('role', { enum: ['owner', 'editor', 'viewer'] }).notNull(),
+    invitedBy: text('invited_by'),
+    joinedAt: integer('joined_at').notNull(),
+    lastOpenedAt: integer('last_opened_at'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workbookId, t.userId] }),
+    uniqueIndex('workbook_members_workbook_user_idx').on(t.workbookId, t.userId),
+  ],
+);
+
+/**
  * Instance-wide currency-rate cache for FINANCE(), fetched from Frankfurter.
  * Deliberately NOT tenant/user-scoped — exchange rates are public data, same
  * rationale as sovereign-ledger's untenanted `ledger_fx_rates` cache.
@@ -69,12 +101,15 @@ export const financeRateCache = sqliteTable(
 export const sheetsTables = {
   workbooks,
   sheets,
+  workbookMembers,
   financeRateCache,
 };
 
 export type Workbook = InferSelectModel<typeof workbooks>;
 export type Sheet = InferSelectModel<typeof sheets>;
+export type WorkbookMember = InferSelectModel<typeof workbookMembers>;
 export type FinanceRateCacheEntry = InferSelectModel<typeof financeRateCache>;
 export type NewWorkbook = InferInsertModel<typeof workbooks>;
 export type NewSheet = InferInsertModel<typeof sheets>;
+export type NewWorkbookMember = InferInsertModel<typeof workbookMembers>;
 export type NewFinanceRateCacheEntry = InferInsertModel<typeof financeRateCache>;

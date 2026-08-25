@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, ConfirmDialog } from '@sovereignfs/ui';
+import { Button, ConfirmDialog, StatusBadge } from '@sovereignfs/ui';
+import type { DirectoryUser } from '@sovereignfs/sdk';
 import { BackLink } from './BackLink';
 import { SheetTabs, type SheetTabItem } from './SheetTabs';
 import { SheetGrid } from './SheetGrid';
+import { WorkbookShareButton } from './WorkbookShareButton';
 import {
   addSheetAction,
   deleteSheetAction,
@@ -15,10 +17,12 @@ import {
   saveSheetCellsAction,
   setActiveSheetAction,
 } from '../actions';
+import type { ActionResult } from '../_lib/context';
 import { DEFAULT_COL_COUNT, DEFAULT_ROW_COUNT } from '../_lib/config';
 import { cellsMapToGrid, createEngine, gridToCellsMap } from '../_lib/formula-engine';
 import { parseCellsJson, serializeCellsJson } from '../_lib/cells';
 import { extractFinancePairs, getCachedRate, setCachedRate } from '../_lib/finance-function';
+import type { WorkbookMemberView } from '../_lib/workbook-sharing';
 import styles from './WorkbookView.module.css';
 
 export interface WorkbookSheet extends SheetTabItem {
@@ -31,10 +35,24 @@ export function WorkbookView({
   workbookId,
   name,
   sheets: initialSheets,
+  canEdit,
+  isOwner,
+  listMembersAction,
+  searchUsersAction,
+  inviteMemberAction,
+  removeMemberAction,
 }: {
   workbookId: string;
   name: string;
   sheets: WorkbookSheet[];
+  /** Viewer role: grid/tabs render read-only, no Undo/Redo, no Delete workbook. */
+  canEdit: boolean;
+  /** Owner-only: gates the Share button/dialog. */
+  isOwner: boolean;
+  listMembersAction: () => Promise<WorkbookMemberView[]>;
+  searchUsersAction: (query: string) => Promise<DirectoryUser[]>;
+  inviteMemberAction: (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
+  removeMemberAction: (userId: string) => Promise<ActionResult>;
 }) {
   const [sheetList, setSheetList] = useState(initialSheets);
   const [activeSheetId, setActiveSheetId] = useState(initialSheets[0]?.id ?? null);
@@ -140,7 +158,7 @@ export function WorkbookView({
       const hfId = hfSheetIds.current.get(sheet.id);
       if (hfId === undefined) continue;
       const grid = engine.getSheetSerialized(hfId);
-      void saveSheetCellsAction(sheet.id, serializeCellsJson(gridToCellsMap(grid)));
+      void saveSheetCellsAction(workbookId, sheet.id, serializeCellsJson(gridToCellsMap(grid)));
     }
   }
 
@@ -202,22 +220,43 @@ export function WorkbookView({
       <div className={styles.header}>
         <div>
           <BackLink href="/sheets">Back to workbooks</BackLink>
-          <h1 className={styles.title}>{name}</h1>
+          <div className={styles.titleRow}>
+            <h1 className={styles.title}>{name}</h1>
+            {!canEdit && (
+              <StatusBadge status="unmodified" aria-label="You can view but not edit this workbook">
+                View only
+              </StatusBadge>
+            )}
+          </div>
         </div>
         <div className={styles.headerActions}>
-          <Button variant="ghost" size="sm" onClick={handleUndo}>
-            Undo
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleRedo}>
-            Redo
-          </Button>
-          <button
-            type="button"
-            className={styles.deleteWorkbook}
-            onClick={() => setConfirmDeleteWorkbook(true)}
-          >
-            Delete workbook
-          </button>
+          {canEdit && (
+            <>
+              <Button variant="ghost" size="sm" onClick={handleUndo}>
+                Undo
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleRedo}>
+                Redo
+              </Button>
+            </>
+          )}
+          {isOwner && (
+            <WorkbookShareButton
+              listMembersAction={listMembersAction}
+              searchUsersAction={searchUsersAction}
+              inviteAction={inviteMemberAction}
+              removeAction={removeMemberAction}
+            />
+          )}
+          {isOwner && (
+            <button
+              type="button"
+              className={styles.deleteWorkbook}
+              onClick={() => setConfirmDeleteWorkbook(true)}
+            >
+              Delete workbook
+            </button>
+          )}
         </div>
       </div>
 
@@ -229,11 +268,13 @@ export function WorkbookView({
         onRename={handleRenameSheet}
         onDelete={setConfirmDeleteSheetId}
         onReorder={handleReorder}
+        canEdit={canEdit}
       />
 
       {activeSheet && engine && activeHfSheetId !== undefined && (
         <SheetGrid
           engine={engine}
+          workbookId={workbookId}
           hfSheetId={activeHfSheetId}
           sheetId={activeSheet.id}
           sheetName={activeSheet.name}
@@ -242,6 +283,7 @@ export function WorkbookView({
           version={version}
           onVersionChange={setVersion}
           onCellCommitted={handleCellCommitted}
+          canEdit={canEdit}
         />
       )}
 

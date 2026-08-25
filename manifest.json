@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "id": "fs.sovereign.sheets",
   "name": "Sheets",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "A lightweight spreadsheet with formulas and a built-in currency conversion function.",
   "type": "sovereign",
   "runtime": "native",
   "routePrefix": "/sheets",
   "shell": "default",
   "icon": "icon.svg",
-  "permissions": ["auth:session", "db:readWrite"],
+  "permissions": ["auth:session", "db:readWrite", "notifications:send"],
   "repository": "https://github.com/sovereignfs/sovereign-plugin-sheets",
   "compatibility": {
     "minPlatformVersion": "0.42.0"

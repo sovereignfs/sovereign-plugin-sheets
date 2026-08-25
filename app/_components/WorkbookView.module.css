@@ -14,6 +14,12 @@
   gap: var(--sv-space-4);
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sv-space-2);
+}
+
 .title {
   font-size: var(--sv-font-size-2xl);
   margin: var(--sv-space-1) 0 0;

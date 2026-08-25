@@ -37,10 +37,16 @@ alongside richer cell formatting, since both want the same selection concept.
 
 ---
 
+## Post-MVP (shipped)
+
+| # | Task | Spec ref | Depends on | Status |
+| - | ---- | -------- | ---------- | ------ |
+| 6 | **Home redesign + workbook sharing** — `ThreeColumnLayout` home (`SheetsSidebar`: Workbooks/Inbox nav + Recent list; main content: My workbooks/Shared with me), `workbook_members` table (owner/editor/viewer), `resolveWorkbookRole()` authorization on every action, owner-only Share dialog, viewer-mode read-only grid, Inbox digest, route move to `/sheets/w/[id]` | [docs/adhoc/home-and-sharing.md](docs/adhoc/home-and-sharing.md), SPEC.md's "Workbook sharing" | Task 5 | ✅ |
+
 ## Post-MVP (not scheduled)
 
 See SPEC.md's "Post-MVP" section for the full list. Roughly, in likely order
-of value once MVP ships:
+of value now that task 6 has shipped:
 
 1. Stock/security quotes as a `FINANCE()` extension (needs a keyed provider +
    the admin-secrets/Console-settings workflow this MVP deliberately avoids).
@@ -49,4 +55,6 @@ of value once MVP ships:
 4. Named ranges, data validation.
 5. Charts.
 6. Real-time multiplayer editing (largest lift — conflict resolution,
-   presence, likely a data-model change to per-cell rows).
+   presence, likely a data-model change to per-cell rows; workbook sharing,
+   task 6, is access control only — this is a separate, much larger
+   collaboration feature).

@@ -2,7 +2,7 @@
 
 A lightweight, self-hostable spreadsheet for [Sovereign](https://github.com/sovereignfs/sovereign), with a built-in currency conversion function.
 
-**Status:** v0.1.3 — MVP complete (see [ROADMAP.md](ROADMAP.md))
+**Status:** v0.2.0 — MVP complete, workbook sharing added (see [ROADMAP.md](ROADMAP.md))
 **Plugin ID:** `fs.sovereign.sheets`
 **Route:** `/sheets`
 
@@ -11,11 +11,12 @@ A lightweight, self-hostable spreadsheet for [Sovereign](https://github.com/sove
 ## What it is
 
 Sheets is a Google-Sheets-like spreadsheet: a grid of cells, a formula bar,
-and multiple sheet tabs per workbook. The MVP is intentionally small — a
-single user editing one workbook at a time, standard formulas and cell
-references, and one custom function, `FINANCE(base, quote)`, Sheets'
-answer to `GOOGLEFINANCE()` for pulling a live currency exchange rate into a
-cell.
+and multiple sheet tabs per workbook. The MVP is intentionally small —
+standard formulas and cell references, and one custom function,
+`FINANCE(base, quote)`, Sheets' answer to `GOOGLEFINANCE()` for pulling a
+live currency exchange rate into a cell. Workbooks can be shared with other
+users on the same instance (owner/editor/viewer roles) — see SPEC.md's
+"Workbook sharing" section.
 
 See [SPEC.md](SPEC.md) for the full functional requirements and data model,
 and [ROADMAP.md](ROADMAP.md) for the proposed build order.

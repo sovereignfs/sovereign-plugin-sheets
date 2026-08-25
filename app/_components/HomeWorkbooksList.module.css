@@ -1,0 +1,71 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sv-space-4);
+  padding: var(--sv-space-6);
+}
+
+.search {
+  max-width: 280px;
+}
+
+.lists {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sv-space-6);
+}
+
+.headingRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sv-space-2);
+  margin-bottom: var(--sv-space-2);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--sv-font-size-sm);
+  font-weight: 600;
+  color: var(--sv-color-text-muted);
+}
+
+.addButton {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--sv-radius-sm);
+  background: var(--sv-color-text-primary);
+  color: var(--sv-color-surface);
+  cursor: pointer;
+}
+
+.groupEmpty {
+  margin: 0;
+  font-size: var(--sv-font-size-sm);
+  color: var(--sv-color-text-subtle);
+}
+
+.tileLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.tileLabel {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  color: var(--sv-color-text-primary);
+  font-weight: 500;
+}
+
+.tileBadge {
+  display: block;
+  margin-top: var(--sv-space-1);
+  font-size: var(--sv-font-size-xs);
+  color: var(--sv-color-text-muted);
+}

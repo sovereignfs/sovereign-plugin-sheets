@@ -4,7 +4,8 @@
 **Date:** July 2026\
 **Author:** kasunben\
 **Purpose:** Canonical specification for the Sheets plugin — the single source of truth for its manifest, access model, data model, and build plan.\
-**Status:** MVP shipped (tasks 1–5, see ROADMAP.md).
+**Status:** MVP shipped (tasks 1–5); workbook sharing shipped post-MVP
+(task 6) — see ROADMAP.md.
 
 ---
 
@@ -54,7 +55,8 @@ explicitly future work, tracked in "Post-MVP" below, not designed away.
 - Real-time multiplayer editing, live cursors/presence, comments.
 - Charts, pivot tables, conditional formatting, cell styling beyond the
   minimal format enum, data validation, named ranges.
-- Sharing/permissions beyond a single owner per workbook.
+- Sharing/permissions beyond a single owner per workbook (shipped post-MVP,
+  task 6 — see "Workbook sharing" below).
 - XLSX/CSV *import* (export only in MVP).
 - Stock/ticker quotes or any `FINANCE()` attribute beyond a currency rate;
   historical time-series lookups.
@@ -183,6 +185,75 @@ export const financeRateCache = sqliteTable('finance_rate_cache', {
 No provider-config or usage-quota table in MVP — Frankfurter needs no API key
 and has no quota to track.
 
+## Workbook sharing (post-MVP, task 6)
+
+Shipped alongside the home redesign — see
+[`docs/adhoc/home-and-sharing.md`](docs/adhoc/home-and-sharing.md) for the
+full wireframe spec this was built from. Modeled closely on the Docs
+plugin's folder-level sharing (`docs_folder_members`), the closest existing
+platform precedent for "a single-owner container whose role also grants
+access to everything inside it."
+
+**Model:** workbook-level only — a shared member gets access to every sheet
+tab in that workbook. There's no per-sheet sharing; Sheets has no
+nested-folder structure the way Docs does, so there's no separate level to
+put sharing at.
+
+```ts
+// Isolated SQLite DB — no slug-prefix required. workbooks.owner_user_id
+// stays the immutable creator record; this table is the actual access-
+// control surface, seeded with an `owner` row for the creator on every
+// workbook insert.
+export const workbookMembers = sqliteTable(
+  'workbook_members',
+  {
+    workbookId: text('workbook_id').notNull().references(() => workbooks.id),
+    userId: text('user_id').notNull(),
+    tenantId: text('tenant_id').notNull(),
+    role: text('role', { enum: ['owner', 'editor', 'viewer'] }).notNull(),
+    invitedBy: text('invited_by'),
+    joinedAt: integer('joined_at').notNull(),
+    // Per (workbook, user) — not on `workbooks` itself. A workbook is
+    // shared, so "recently opened" tracks each member's own access, not
+    // whichever member opened it most recently instance-wide.
+    lastOpenedAt: integer('last_opened_at'),
+  },
+  (t) => [primaryKey({ columns: [t.workbookId, t.userId] })],
+);
+```
+
+`lastOpenedAt` is bumped on every `getWorkbook()` load, for the loading
+user's own membership row — powers the Home sidebar's Recent list.
+
+**Roles:** `owner` / `editor` / `viewer`, same three-role shape as Docs'
+`FolderMemberRole`. `resolveWorkbookRole()` replaces every previous
+`eq(workbooks.ownerUserId, session.user.id)` check in `app/actions.ts` —
+read actions accept any role, write actions require owner/editor, workbook
+deletion and sharing management require owner. A viewer gets a fully
+read-only workbook: grid cells and the formula bar render `readOnly`, and
+every sheet-tab/workbook mutation control (add/rename/delete/reorder sheets,
+Undo/Redo, Delete workbook) simply doesn't render — enforced again
+server-side in every action, per the platform's "authorize inside the
+action" rule, not just by hiding the controls. CSV export stays available
+to every role — it's a read operation.
+
+**Sharing UI:** an owner-only "Share" dialog (`WorkbookShareButton`/
+`WorkbookShareDialog`) — member list with role badges + Remove, an invite
+form with an `sdk.directory` typeahead and a role select. A close port of
+Docs' `FolderShareButton`/`FolderShareDialog`, kept independently evolvable
+rather than shared. The last remaining owner can't be demoted or removed.
+
+**Notifications:** in-app only via `sdk.notifications.send` (the
+`notifications:send` manifest permission) on a new share — no email. This
+is a smaller surface than Docs' equivalent (which also sends an email via
+`sdk.mailer.send`); matches Kanban's own sharing notification pattern
+instead. Revisit if email invites prove worth the added `mailer:send`
+permission.
+
+**Not solved (same as every other plugin with sharing):** no live-kick on
+member removal — an editor/viewer who loses access mid-session keeps
+working until their next page load, same as Docs/Kanban.
+
 ## Architecture
 
 ```
@@ -192,19 +263,31 @@ plugins/sovereign-sheets.local/
   icon.svg
   SPEC.md / README.md / CLAUDE.md / ROADMAP.md
   app/
-    page.tsx                    # workbook list / "new workbook"
+    (home)/                     # sidebar-having route group (ThreeColumnLayout)
+      layout.tsx                 # Workbooks/Inbox nav + Recent list, data-plugin-fullbleed
+      page.tsx                   # Workbooks — My workbooks / Shared with me
+      inbox/page.tsx              # workbooks shared with you
+    w/[workbookId]/page.tsx      # workbook editor — outside (home), no sidebar
     layout.tsx
-    [workbookId]/page.tsx       # loads workbook+sheets, renders the grid
-    actions.ts                  # createWorkbook, loadWorkbook, saveSheet,
-                                 # addSheet, renameSheet, deleteSheet,
-                                 # getFinanceRate (server bridge for FINANCE())
+    actions.ts                  # createWorkbook, getWorkbook, saveSheet, addSheet,
+                                 # renameSheet, deleteSheet, getFinanceRate,
+                                 # listWorkbooksOverview, listRecentWorkbooks,
+                                 # resolveWorkbookRole
     _components/
-      WorkbookView.tsx           # owns the HyperFormula instance for the workbook
+      SheetsSidebar.tsx           # (home) nav + Recent list
+      HomeWorkbooksList.tsx       # My workbooks / Shared with me, search
+      NewWorkbookDialog.tsx
+      WorkbookView.tsx            # owns the HyperFormula instance for the workbook
+      WorkbookShareButton.tsx     # owner-only Share entry point
+      WorkbookShareDialog.tsx     # member list + invite form
       SheetGrid.tsx              # active sheet's grid, reads/writes via the shared engine
       SheetTabs.tsx
       FormulaBar.tsx             # built on CodeTextarea (@sovereignfs/ui)
       BackLink.tsx
     _lib/
+      context.ts                 # getContext()/ActionResult, shared by every action
+      workbook-rules.ts          # WorkbookMemberRole, canEditWorkbookRole()
+      workbook-sharing.ts        # invite/remove/list members, in-app notify
       formula-engine.ts          # engine init, cellsJson<->grid conversion, error display
       finance-function.ts        # FINANCE() HyperFormula plugin + rate cache
       frankfurter.ts             # thin fetch client for api.frankfurter.dev
@@ -237,25 +320,27 @@ actions), `EmptyState` (no-workbooks state).
   "schemaVersion": 1,
   "id": "fs.sovereign.sheets",
   "name": "Sheets",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "A lightweight spreadsheet with formulas and a built-in currency conversion function.",
   "type": "sovereign",
   "runtime": "native",
   "routePrefix": "/sheets",
   "shell": "default",
   "icon": "icon.svg",
-  "permissions": ["auth:session", "db:readWrite"],
+  "permissions": ["auth:session", "db:readWrite", "notifications:send"],
   "repository": "https://github.com/sovereignfs/sovereign-plugin-sheets",
   "compatibility": { "minPlatformVersion": "0.42.0" }
 }
 ```
 
-- `auth:session` + `db:readWrite` are the only permissions declared. No
-  `data:export` — CSV export is a client-side `Blob` download, not the
-  `portability.provideExport()` flow. No `activity:write` — no
-  `sdk.activity.log()` calls exist. No `data:import` (no CSV import in MVP),
-  no `notifications:send`, no invented permission for a settings gate — none
-  needed since `FINANCE()` requires no secret.
+- `auth:session` + `db:readWrite` + `notifications:send` (task 6, workbook
+  sharing — the in-app "shared a workbook with you" notification). No
+  `mailer:send` — sharing notifies in-app only, no email (see "Workbook
+  sharing" above). No `data:export` — CSV export is a client-side `Blob`
+  download, not the `portability.provideExport()` flow. No `activity:write`
+  — no `sdk.activity.log()` calls exist. No `data:import` (no CSV import in
+  MVP), no invented permission for a settings gate — none needed since
+  `FINANCE()` requires no secret.
 - No `database` field in the manifest — the per-plugin `isolation`/`dialect`
   overrides were both retired platform-wide; every sovereign/community plugin
   is now unconditionally isolated, with dialect set instance-wide via
@@ -300,4 +385,3 @@ at `catalog:`; devDeps `drizzle-kit`, `@sovereignfs/tsconfig`,
 - Charts, pivot tables, conditional formatting, named ranges, data
   validation, richer cell styling.
 - XLSX import/export, CSV import.
-- Sharing/permissions model beyond single owner.

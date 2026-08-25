@@ -4,14 +4,16 @@ Guidance for Claude Code working in this plugin repository.
 
 ## What this is
 
-**Sheets** — a lightweight, self-hostable spreadsheet: a single-user workbook
-with multiple sheet tabs, standard formulas, and one custom function,
+**Sheets** — a lightweight, self-hostable spreadsheet: workbooks with
+multiple sheet tabs, standard formulas, one custom function,
 `FINANCE(base, quote)`, for currency conversion (the GOOGLEFINANCE
-equivalent). A `type: sovereign` Sovereign plugin, open source (AGPLv3).
+equivalent), and workbook-level sharing (owner/editor/viewer). A
+`type: sovereign` Sovereign plugin, open source (AGPLv3).
 
 **Status: MVP shipped** (tasks 1–5 in ROADMAP.md) — workbooks, sheets,
 HyperFormula-backed formulas, `FINANCE()`, and CSV export are all live at
-`/sheets`.
+`/sheets`. **Workbook sharing shipped post-MVP** (task 6), alongside a
+`ThreeColumnLayout` home redesign — see SPEC.md's "Workbook sharing" section.
 
 Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
@@ -22,17 +24,24 @@ Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 | Plugin ID     | `fs.sovereign.sheets`          |
 | Route prefix  | `/sheets`                      |
 | Database      | `isolated` — own SQLite file, no slug-prefix required |
-| Permissions   | `auth:session`, `db:readWrite` |
+| Permissions   | `auth:session`, `db:readWrite`, `notifications:send` |
 | Min platform  | `0.42.0`                       |
 
 ## MVP scope discipline
 
 The long-term ambition is a real Google Sheets alternative. **The MVP is
-deliberately narrow** — single-user, single-workbook-per-doc, no real-time
-collaboration, no charts/pivot tables/conditional formatting, CSV export only
-(no import). Don't let "make it feel like Google Sheets" pull scope back in
-during implementation; SPEC.md's "Post-MVP" section is where deferred
-features are tracked, not silently reintroduced into an MVP task.
+deliberately narrow** — single-workbook-per-doc, no real-time collaboration,
+no charts/pivot tables/conditional formatting, CSV export only (no import).
+Don't let "make it feel like Google Sheets" pull scope back in during
+implementation; SPEC.md's "Post-MVP" section is where deferred features are
+tracked, not silently reintroduced into an MVP task.
+
+**Workbook sharing is the one deliberate exception** — it shipped post-MVP
+(task 6) as a scoped-in addition, not scope creep: SPEC.md's "Workbook
+sharing" section is the design record. It's still *workbook-level* sharing
+only (no per-sheet sharing, no real-time multiplayer/presence/comments —
+those stay out per the bullet above). Don't conflate "sharing shipped" with
+"collaboration shipped."
 
 ## `FINANCE()` is currency conversion only
 
@@ -63,11 +72,13 @@ scope discussion; that's real added complexity (diffing on every autosave,
 row upserts per paste/fill-down) that only pays off once real-time
 collaboration is in scope.
 
-The one normalized table beyond `workbooks`/`sheets` is `finance_rate_cache`,
-keyed on `(base, quote)`, **instance-wide** — not tenant/user-scoped. Exchange
-rates are public data, same rationale as the Ledger plugin's untenanted
-`ledger_fx_rates` cache (`plugins/sovereign-ledger.local` in the platform
-monorepo).
+Two normalized tables sit alongside `workbooks`/`sheets`: `finance_rate_cache`,
+keyed on `(base, quote)`, **instance-wide** — not tenant/user-scoped, since
+exchange rates are public data (same rationale as the Ledger plugin's
+untenanted `ledger_fx_rates` cache, `plugins/sovereign-ledger.local` in the
+platform monorepo) — and `workbook_members` (task 6), the workbook-sharing
+access-control table, which *is* tenant/user-scoped per row (see SPEC.md's
+"Workbook sharing").
 
 ## SDK-only rule
 
@@ -103,4 +114,4 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.1.3** (MVP shipped — see ROADMAP.md)
+Current version: **0.2.0** (task 6 — home redesign + workbook sharing, see ROADMAP.md)

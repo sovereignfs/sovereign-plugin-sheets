@@ -1,52 +1,127 @@
 'use server';
 
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
-import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { sdk } from '@sovereignfs/sdk';
-import { financeRateCache, sheets, workbooks } from './_db/schema';
+import { financeRateCache, sheets, workbookMembers, workbooks } from './_db/schema';
 import { DEFAULT_COL_COUNT, DEFAULT_ROW_COUNT } from './_lib/config';
-import { formString, now } from './_lib/formUtils';
+import { type Db, getContext, now } from './_lib/context';
+import { formString } from './_lib/formUtils';
 import { fetchFrankfurterRates } from './_lib/frankfurter';
 import { pairKey } from './_lib/finance-function';
+import { canEditWorkbookRole, type WorkbookMemberRole } from './_lib/workbook-rules';
 
+const RECENT_WORKBOOKS_LIMIT = 8;
 const FINANCE_RATE_TTL_SECONDS = 6 * 60 * 60;
 
-// DrizzleClient is typed as `unknown` in the SDK (dialect-agnostic contract).
-// This plugin's manifest pins an isolated SQLite store, so the cast is safe.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Db = BaseSQLiteDatabase<'async', any, any>;
+/** A user's role for one workbook, or `null` if they have no `workbook_members` row at all. */
+export async function resolveWorkbookRole(
+  db: Db,
+  tenantId: string,
+  userId: string,
+  workbookId: string,
+): Promise<WorkbookMemberRole | null> {
+  const [membership] = await db
+    .select({ role: workbookMembers.role })
+    .from(workbookMembers)
+    .where(
+      and(
+        eq(workbookMembers.workbookId, workbookId),
+        eq(workbookMembers.tenantId, tenantId),
+        eq(workbookMembers.userId, userId),
+      ),
+    );
+  return membership?.role ?? null;
+}
 
-export interface WorkbookListItem {
+/** `'read'` accepts any role; `'write'` requires owner/editor; `'owner'` requires the owner role. */
+async function hasWorkbookAccess(
+  db: Db,
+  tenantId: string,
+  userId: string,
+  workbookId: string,
+  need: 'read' | 'write' | 'owner',
+): Promise<boolean> {
+  const role = await resolveWorkbookRole(db, tenantId, userId, workbookId);
+  if (!role) return false;
+  if (need === 'read') return true;
+  if (need === 'write') return canEditWorkbookRole(role);
+  return role === 'owner';
+}
+
+export interface WorkbookOverviewItem {
   id: string;
   name: string;
   updatedAt: number;
+  role: WorkbookMemberRole;
 }
 
-export async function listWorkbooks(): Promise<WorkbookListItem[]> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+/** Every workbook the signed-in user has any `workbook_members` role on — owner or shared. */
+export async function listWorkbooksOverview(): Promise<WorkbookOverviewItem[]> {
+  const { db, userId, tenantId } = await getContext();
+
+  const memberships = await db
+    .select({ workbookId: workbookMembers.workbookId, role: workbookMembers.role })
+    .from(workbookMembers)
+    .where(and(eq(workbookMembers.tenantId, tenantId), eq(workbookMembers.userId, userId)));
+
+  if (memberships.length === 0) return [];
+  const roleByWorkbookId = new Map(memberships.map((m) => [m.workbookId, m.role]));
 
   const rows = await db
     .select({ id: workbooks.id, name: workbooks.name, updatedAt: workbooks.updatedAt })
     .from(workbooks)
     .where(
       and(
-        eq(workbooks.tenantId, session.user.tenantId),
-        eq(workbooks.ownerUserId, session.user.id),
+        eq(workbooks.tenantId, tenantId),
+        inArray(
+          workbooks.id,
+          memberships.map((m) => m.workbookId),
+        ),
         isNull(workbooks.deletedAt),
       ),
     )
     .orderBy(desc(workbooks.updatedAt));
 
+  return rows.map((row) => ({ ...row, role: roleByWorkbookId.get(row.id) ?? 'viewer' }));
+}
+
+export interface RecentWorkbookItem {
+  id: string;
+  name: string;
+}
+
+/**
+ * Last `RECENT_WORKBOOKS_LIMIT` workbooks this user opened — owner or
+ * shared, mixed by recency. `lastOpenedAt` lives on `workbookMembers`, per
+ * (workbook, user) — a workbook another member opened must never appear in
+ * *this* user's own Recent list.
+ */
+export async function listRecentWorkbooks(): Promise<RecentWorkbookItem[]> {
+  const { db, userId, tenantId } = await getContext();
+
+  const rows = await db
+    .select({ id: workbooks.id, name: workbooks.name })
+    .from(workbookMembers)
+    .innerJoin(workbooks, eq(workbooks.id, workbookMembers.workbookId))
+    .where(
+      and(
+        eq(workbookMembers.tenantId, tenantId),
+        eq(workbookMembers.userId, userId),
+        isNotNull(workbookMembers.lastOpenedAt),
+        isNull(workbooks.deletedAt),
+      ),
+    )
+    .orderBy(desc(workbookMembers.lastOpenedAt))
+    .limit(RECENT_WORKBOOKS_LIMIT);
+
   return rows;
 }
 
 export async function createWorkbookAction(formData: FormData): Promise<void> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
 
   const name = formString(formData, 'name') || 'Untitled workbook';
   const timestamp = now();
@@ -55,17 +130,26 @@ export async function createWorkbookAction(formData: FormData): Promise<void> {
 
   await db.insert(workbooks).values({
     id: workbookId,
-    tenantId: session.user.tenantId,
-    ownerUserId: session.user.id,
+    tenantId,
+    ownerUserId: userId,
     name,
     activeSheetId: sheetId,
     createdAt: timestamp,
     updatedAt: timestamp,
   });
 
+  await db.insert(workbookMembers).values({
+    workbookId,
+    userId,
+    tenantId,
+    role: 'owner',
+    invitedBy: null,
+    joinedAt: timestamp,
+  });
+
   await db.insert(sheets).values({
     id: sheetId,
-    tenantId: session.user.tenantId,
+    tenantId,
     workbookId,
     name: 'Sheet1',
     position: 0,
@@ -76,11 +160,12 @@ export async function createWorkbookAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath('/sheets');
-  redirect(`/sheets/${workbookId}`);
+  redirect(`/sheets/w/${workbookId}`);
 }
 
 export interface WorkbookWithSheets {
   workbook: { id: string; name: string; activeSheetId: string | null };
+  role: WorkbookMemberRole;
   sheets: {
     id: string;
     name: string;
@@ -92,28 +177,36 @@ export interface WorkbookWithSheets {
 }
 
 export async function getWorkbook(workbookId: string): Promise<WorkbookWithSheets | null> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
+
+  const role = await resolveWorkbookRole(db, tenantId, userId, workbookId);
+  if (!role) return null;
 
   const [workbook] = await db
     .select()
     .from(workbooks)
     .where(
-      and(
-        eq(workbooks.id, workbookId),
-        eq(workbooks.tenantId, session.user.tenantId),
-        eq(workbooks.ownerUserId, session.user.id),
-        isNull(workbooks.deletedAt),
-      ),
+      and(eq(workbooks.id, workbookId), eq(workbooks.tenantId, tenantId), isNull(workbooks.deletedAt)),
     )
     .limit(1);
 
   if (!workbook) return null;
 
+  await db
+    .update(workbookMembers)
+    .set({ lastOpenedAt: now() })
+    .where(
+      and(
+        eq(workbookMembers.workbookId, workbookId),
+        eq(workbookMembers.tenantId, tenantId),
+        eq(workbookMembers.userId, userId),
+      ),
+    );
+
   const sheetRows = await db
     .select()
     .from(sheets)
-    .where(and(eq(sheets.workbookId, workbookId), eq(sheets.tenantId, session.user.tenantId)))
+    .where(and(eq(sheets.workbookId, workbookId), eq(sheets.tenantId, tenantId)))
     .orderBy(asc(sheets.position));
 
   return {
@@ -122,6 +215,7 @@ export async function getWorkbook(workbookId: string): Promise<WorkbookWithSheet
       name: workbook.name,
       activeSheetId: workbook.activeSheetId,
     },
+    role,
     sheets: sheetRows.map((s) => ({
       id: s.id,
       name: s.name,
@@ -133,42 +227,40 @@ export async function getWorkbook(workbookId: string): Promise<WorkbookWithSheet
   };
 }
 
-export async function saveSheetCellsAction(sheetId: string, cellsJson: string): Promise<void> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+export async function saveSheetCellsAction(
+  workbookId: string,
+  sheetId: string,
+  cellsJson: string,
+): Promise<void> {
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;
 
   await db
     .update(sheets)
     .set({ cellsJson, updatedAt: now() })
-    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, session.user.tenantId)));
+    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
 }
 
 export async function setActiveSheetAction(workbookId: string, sheetId: string): Promise<void> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'read'))) return;
 
   await db
     .update(workbooks)
     .set({ activeSheetId: sheetId, updatedAt: now() })
-    .where(
-      and(
-        eq(workbooks.id, workbookId),
-        eq(workbooks.tenantId, session.user.tenantId),
-        eq(workbooks.ownerUserId, session.user.id),
-      ),
-    );
+    .where(and(eq(workbooks.id, workbookId), eq(workbooks.tenantId, tenantId)));
 }
 
 export async function addSheetAction(
   workbookId: string,
 ): Promise<{ id: string; name: string } | null> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return null;
 
   const existing = await db
     .select({ position: sheets.position, name: sheets.name })
     .from(sheets)
-    .where(and(eq(sheets.workbookId, workbookId), eq(sheets.tenantId, session.user.tenantId)))
+    .where(and(eq(sheets.workbookId, workbookId), eq(sheets.tenantId, tenantId)))
     .orderBy(asc(sheets.position));
 
   const nextPosition = existing.length === 0 ? 0 : Math.max(...existing.map((s) => s.position)) + 1;
@@ -185,7 +277,7 @@ export async function addSheetAction(
 
   await db.insert(sheets).values({
     id: sheetId,
-    tenantId: session.user.tenantId,
+    tenantId,
     workbookId,
     name,
     position: nextPosition,
@@ -195,7 +287,7 @@ export async function addSheetAction(
     updatedAt: timestamp,
   });
 
-  revalidatePath(`/sheets/${workbookId}`);
+  revalidatePath(`/sheets/w/${workbookId}`);
   return { id: sheetId, name };
 }
 
@@ -204,8 +296,8 @@ export async function renameSheetAction(
   workbookId: string,
   name: string,
 ): Promise<void> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;
 
   const trimmed = name.trim();
   if (!trimmed) return;
@@ -213,26 +305,26 @@ export async function renameSheetAction(
   await db
     .update(sheets)
     .set({ name: trimmed, updatedAt: now() })
-    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, session.user.tenantId)));
+    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
 
-  revalidatePath(`/sheets/${workbookId}`);
+  revalidatePath(`/sheets/w/${workbookId}`);
 }
 
 export async function deleteSheetAction(sheetId: string, workbookId: string): Promise<void> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;
 
   const remaining = await db
     .select({ id: sheets.id })
     .from(sheets)
-    .where(and(eq(sheets.workbookId, workbookId), eq(sheets.tenantId, session.user.tenantId)));
+    .where(and(eq(sheets.workbookId, workbookId), eq(sheets.tenantId, tenantId)));
 
   // Always keep at least one sheet per workbook.
   if (remaining.length <= 1) return;
 
   await db
     .delete(sheets)
-    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, session.user.tenantId)));
+    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
 
   const [workbook] = await db
     .select({ activeSheetId: workbooks.activeSheetId })
@@ -250,15 +342,15 @@ export async function deleteSheetAction(sheetId: string, workbookId: string): Pr
     }
   }
 
-  revalidatePath(`/sheets/${workbookId}`);
+  revalidatePath(`/sheets/w/${workbookId}`);
 }
 
 export async function reorderSheetsAction(
   workbookId: string,
   orderedSheetIds: string[],
 ): Promise<void> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;
 
   await Promise.all(
     orderedSheetIds.map((sheetId, position) =>
@@ -269,29 +361,23 @@ export async function reorderSheetsAction(
           and(
             eq(sheets.id, sheetId),
             eq(sheets.workbookId, workbookId),
-            eq(sheets.tenantId, session.user.tenantId),
+            eq(sheets.tenantId, tenantId),
           ),
         ),
     ),
   );
 
-  revalidatePath(`/sheets/${workbookId}`);
+  revalidatePath(`/sheets/w/${workbookId}`);
 }
 
 export async function deleteWorkbookAction(workbookId: string): Promise<void> {
-  const session = await sdk.auth.requireSession();
-  const db = (await sdk.db.getClient()) as Db;
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'owner'))) return;
 
   await db
     .update(workbooks)
     .set({ deletedAt: now(), updatedAt: now() })
-    .where(
-      and(
-        eq(workbooks.id, workbookId),
-        eq(workbooks.tenantId, session.user.tenantId),
-        eq(workbooks.ownerUserId, session.user.id),
-      ),
-    );
+    .where(and(eq(workbooks.id, workbookId), eq(workbooks.tenantId, tenantId)));
 
   revalidatePath('/sheets');
   redirect('/sheets');
@@ -306,12 +392,13 @@ export interface FinanceRateResult {
  * Resolves currency rates for FINANCE() calls, one batched round-trip per
  * distinct base currency. No auth/tenant scoping — rates are cached
  * instance-wide (public market data), same rationale as
- * sovereign-ledger's ledger_fx_rates.
+ * sovereign-ledger's ledger_fx_rates. Unchanged by workbook sharing: this
+ * isn't workbook-scoped data.
  */
 export async function getFinanceRatesAction(
   pairs: { base: string; quote: string }[],
 ): Promise<Record<string, FinanceRateResult | null>> {
-  const db = (await sdk.db.getClient()) as Db;
+  const client = (await sdk.db.getClient()) as Db;
   const nowTs = now();
   const result: Record<string, FinanceRateResult | null> = {};
   const toFetch = new Map<string, Set<string>>();
@@ -326,7 +413,7 @@ export async function getFinanceRatesAction(
       continue;
     }
 
-    const [cached] = await db
+    const [cached] = await client
       .select()
       .from(financeRateCache)
       .where(and(eq(financeRateCache.base, base), eq(financeRateCache.quote, quote)))
@@ -348,7 +435,7 @@ export async function getFinanceRatesAction(
       // Frankfurter unreachable — serve stale cache if we have it, else null.
       for (const quote of quotes) {
         const key = pairKey(base, quote);
-        const [cached] = await db
+        const [cached] = await client
           .select()
           .from(financeRateCache)
           .where(and(eq(financeRateCache.base, base), eq(financeRateCache.quote, quote)))
@@ -368,7 +455,7 @@ export async function getFinanceRatesAction(
       }
       result[key] = { rate, asOf };
       const rateStr = String(rate);
-      await db
+      await client
         .insert(financeRateCache)
         .values({ base, quote, rate: rateStr, asOf, fetchedAt: nowTs, source: 'frankfurter' })
         .onConflictDoUpdate({

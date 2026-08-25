@@ -159,14 +159,21 @@ precedent exactly instead.
 
 - **New `workbook_members` table**, shaped like `docs_folder_members`:
   `(workbookId, userId, tenantId, role enum('owner','editor','viewer'),
-  invitedBy, joinedAt)`, composite PK on `(workbookId, userId)`.
+  invitedBy, joinedAt, lastOpenedAt)`, composite PK on `(workbookId, userId)`.
   `createWorkbookAction` seeds an `owner` row for the creator alongside the
   existing `workbooks` insert. `workbooks.ownerUserId` is unchanged and stays
   as the creator record; access control moves entirely to membership.
-- **New `workbooks.lastOpenedAt` column** (integer, unix seconds), bumped
-  inside `getWorkbook()` on every successful load. Sidebar Recent queries the
-  8 most-recent by this column, across every workbook the user has any
-  membership row for (owner or shared) — not filtered to owned-only.
+- **`lastOpenedAt` lives on `workbook_members`, per (workbook, user) — not
+  on `workbooks` itself.** A workbook is shared, so "recently opened" has to
+  track each member's own access, not whichever member opened it most
+  recently instance-wide. (First pass put this column on `workbooks`
+  directly; live-testing the invited-viewer flow caught the bug immediately
+  — a workbook the owner had opened showed up in the invited viewer's own
+  Recent list before they'd ever opened it themselves. Fixed by moving the
+  column and updating `getWorkbook()`/`listRecentWorkbooks()` accordingly —
+  see migration `0002_black_ricochet.sql`.) Sidebar Recent queries the 8
+  most-recent by this per-user column, across every workbook the user has
+  any membership row for (owner or shared) — not filtered to owned-only.
 - **`resolveWorkbookRole(db, tenantId, userId, workbookId)` helper**
   (mirrors `resolveFolderRole`) replaces the current
   `eq(workbooks.ownerUserId, session.user.id)` check in every action in
