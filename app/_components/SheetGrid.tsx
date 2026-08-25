@@ -15,6 +15,7 @@ const AUTOSAVE_DELAY_MS = 1200;
 
 export function SheetGrid({
   engine,
+  workbookId,
   hfSheetId,
   sheetId,
   sheetName,
@@ -23,8 +24,10 @@ export function SheetGrid({
   version,
   onVersionChange,
   onCellCommitted,
+  canEdit,
 }: {
   engine: HyperFormula;
+  workbookId: string;
   hfSheetId: number;
   sheetId: string;
   sheetName: string;
@@ -33,6 +36,8 @@ export function SheetGrid({
   version: number;
   onVersionChange: (next: number) => void;
   onCellCommitted?: (raw: string) => void;
+  /** Viewer role: grid and formula bar render read-only, no autosave, no fill-down. */
+  canEdit: boolean;
 }) {
   const [status, setStatus] = useState<StatusBadgeStatus>('synced');
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
@@ -61,7 +66,7 @@ export function SheetGrid({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const grid = engine.getSheetSerialized(hfSheetId);
-      void saveSheetCellsAction(sheetId, serializeCellsJson(gridToCellsMap(grid)))
+      void saveSheetCellsAction(workbookId, sheetId, serializeCellsJson(gridToCellsMap(grid)))
         .then(() => setStatus('synced'))
         .catch(() => {
           setStatus('error');
@@ -75,6 +80,7 @@ export function SheetGrid({
   }
 
   function commitCell(row: number, col: number, raw: string) {
+    if (!canEdit) return;
     engine.setCellContents({ sheet: hfSheetId, row, col }, [[raw === '' ? null : raw]]);
     onVersionChange(version + 1);
     scheduleSave();
@@ -87,7 +93,7 @@ export function SheetGrid({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
+    if (canEdit && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') {
       // Fill down: copy this cell's raw input into the cell below.
       e.preventDefault();
       const raw = getRawInput(row, col);
@@ -141,6 +147,7 @@ export function SheetGrid({
         cellLabel={activeCell ? cellKey(activeCell.row, activeCell.col) : ''}
         value={activeCell ? getRawInput(activeCell.row, activeCell.col) : ''}
         disabled={!activeCell}
+        readOnly={!canEdit}
         onCommit={(value) => {
           if (activeCell) commitCell(activeCell.row, activeCell.col, value);
         }}
@@ -149,7 +156,7 @@ export function SheetGrid({
         <Button variant="ghost" size="sm" onClick={handleExportCsv}>
           Export CSV
         </Button>
-        <StatusBadge status={status} />
+        {canEdit && <StatusBadge status={status} />}
       </div>
       <div className={styles.scroller}>
         <table className={styles.grid}>
@@ -179,6 +186,7 @@ export function SheetGrid({
                         }}
                         className={styles.cellInput}
                         value={isActive ? getRawInput(row, col) : getDisplay(row, col)}
+                        readOnly={!canEdit}
                         onFocus={() => setActiveCell({ row, col })}
                         onChange={(e) => commitCell(row, col, e.target.value)}
                         onKeyDown={(e) => handleKeyDown(e, row, col)}

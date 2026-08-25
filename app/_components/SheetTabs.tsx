@@ -17,6 +17,7 @@ export function SheetTabs({
   onRename,
   onDelete,
   onReorder,
+  canEdit,
 }: {
   sheets: SheetTabItem[];
   activeSheetId: string | null;
@@ -25,6 +26,8 @@ export function SheetTabs({
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
+  /** Viewer role: tabs are still selectable, but add/rename/delete/reorder controls don't render. */
+  canEdit: boolean;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
@@ -87,48 +90,52 @@ export function SheetTabs({
                 aria-selected={isActive}
                 className={styles.tabLabel}
                 onClick={() => onSelect(sheet.id)}
-                onDoubleClick={() => startRename(sheet)}
+                onDoubleClick={() => canEdit && startRename(sheet)}
               >
                 {sheet.name}
               </button>
             )}
 
-            <span className={styles.tabControls}>
-              <button
-                type="button"
-                className={styles.tabControl}
-                onClick={() => move(sheet.id, -1)}
-                disabled={index === 0}
-                aria-label={`Move ${sheet.name} left`}
-              >
-                ‹
-              </button>
-              <button
-                type="button"
-                className={styles.tabControl}
-                onClick={() => move(sheet.id, 1)}
-                disabled={index === ordered.length - 1}
-                aria-label={`Move ${sheet.name} right`}
-              >
-                ›
-              </button>
-              {ordered.length > 1 && (
+            {canEdit && (
+              <span className={styles.tabControls}>
                 <button
                   type="button"
                   className={styles.tabControl}
-                  onClick={() => onDelete(sheet.id)}
-                  aria-label={`Delete ${sheet.name}`}
+                  onClick={() => move(sheet.id, -1)}
+                  disabled={index === 0}
+                  aria-label={`Move ${sheet.name} left`}
                 >
-                  ×
+                  ‹
                 </button>
-              )}
-            </span>
+                <button
+                  type="button"
+                  className={styles.tabControl}
+                  onClick={() => move(sheet.id, 1)}
+                  disabled={index === ordered.length - 1}
+                  aria-label={`Move ${sheet.name} right`}
+                >
+                  ›
+                </button>
+                {ordered.length > 1 && (
+                  <button
+                    type="button"
+                    className={styles.tabControl}
+                    onClick={() => onDelete(sheet.id)}
+                    aria-label={`Delete ${sheet.name}`}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            )}
           </div>
         );
       })}
-      <button type="button" className={styles.addTab} onClick={onAdd} aria-label="Add sheet">
-        +
-      </button>
+      {canEdit && (
+        <button type="button" className={styles.addTab} onClick={onAdd} aria-label="Add sheet">
+          +
+        </button>
+      )}
     </div>
   );
 }

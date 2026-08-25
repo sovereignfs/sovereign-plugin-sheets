@@ -8,11 +8,14 @@ export function FormulaBar({
   cellLabel,
   value,
   disabled,
+  readOnly = false,
   onCommit,
 }: {
   cellLabel: string;
   value: string;
   disabled: boolean;
+  /** Viewer role: content stays visible/selectable, but Enter/blur never commit. */
+  readOnly?: boolean;
   onCommit: (value: string) => void;
 }) {
   const [draft, setDraft] = useState(value);
@@ -29,12 +32,15 @@ export function FormulaBar({
         className={styles.input}
         value={draft}
         disabled={disabled}
+        readOnly={readOnly}
         onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => onCommit(draft)}
+        onBlur={() => {
+          if (!readOnly) onCommit(draft);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            onCommit(draft);
+            if (!readOnly) onCommit(draft);
           }
         }}
         aria-label="Formula bar"
