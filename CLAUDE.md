@@ -36,19 +36,22 @@ Don't let "make it feel like Google Sheets" pull scope back in during
 implementation; SPEC.md's "Post-MVP" section is where deferred features are
 tracked, not silently reintroduced into an MVP task.
 
-**Workbook sharing (task 6), CSV import (task 8), and cell number formatting
-(task 9) are the deliberate exceptions** — all shipped post-MVP as
-scoped-in additions, not scope creep: SPEC.md's "Workbook sharing"/"CSV
-import"/"Cell number formatting" sections are the design records. Sharing
-is still *workbook-level* only (no per-sheet sharing, no real-time
-multiplayer/presence/comments — those stay out per the bullet above); CSV
-import is still *single-sheet, full-replace* only (no full-workbook import,
-no XLSX, no merge-with-existing-data mode); cell formatting is still *the
-number-format enum only* (no bold/italic/color, no conditional formatting —
-task 9 deliberately shipped a thinner slice of "richer cell formatting /
-conditional formatting" than the full phrase implies). Don't conflate
-"sharing/import/formatting shipped" with "collaboration/full-fidelity
-import/full styling shipped."
+**Workbook sharing (task 6), CSV import (task 8), cell number formatting
+(task 9), and named ranges (task 10) are the deliberate exceptions** — all
+shipped post-MVP as scoped-in additions, not scope creep: SPEC.md's
+"Workbook sharing"/"CSV import"/"Cell number formatting"/"Named ranges"
+sections are the design records. Sharing is still *workbook-level* only (no
+per-sheet sharing, no real-time multiplayer/presence/comments — those stay
+out per the bullet above); CSV import is still *single-sheet, full-replace*
+only (no full-workbook import, no XLSX, no merge-with-existing-data mode);
+cell formatting is still *the number-format enum only* (no bold/italic/
+color, no conditional formatting — task 9 deliberately shipped a thinner
+slice of "richer cell formatting / conditional formatting" than the full
+phrase implies); named ranges is *just names → formula/reference*, no data
+validation (the other half of the original "named ranges, data validation"
+backlog item — still not started). Don't conflate "sharing/import/
+formatting/named-ranges shipped" with "collaboration/full-fidelity import/
+full styling/data validation shipped."
 
 ## `FINANCE()` is currency conversion only
 
@@ -121,4 +124,4 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.4.0** (task 9 — cell number formatting enum, partial "richer cell formatting" scope — see ROADMAP.md)
+Current version: **0.5.0** (task 10 — named ranges, built on HyperFormula's native named-expression API — see ROADMAP.md)

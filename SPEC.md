@@ -58,7 +58,8 @@ explicitly future work, tracked in "Post-MVP" below, not designed away.
 - Real-time multiplayer editing, live cursors/presence, comments.
 - Charts, pivot tables, conditional formatting, cell styling beyond the
   minimal format enum (no bold/italic/color — task 9 wired up the format
-  enum only), data validation, named ranges.
+  enum only), data validation. Named ranges shipped post-MVP, task 10 — see
+  "Named ranges" below.
 - Sharing/permissions beyond a single owner per workbook (shipped post-MVP,
   task 6 — see "Workbook sharing" below).
 - XLSX import/export (stays deferred). CSV import shipped post-MVP, task 8
@@ -357,7 +358,48 @@ selector.
   a single-cell "highlight this cell if its own value meets a condition"
   version is buildable without one, using the same per-cell-metadata
   mechanism this task introduces, but wasn't included in this pass either.
-- Named ranges, data validation — separate, not-yet-designed features.
+- Named ranges — resolved, shipped post-MVP, task 10, see "Named ranges"
+  below. Data validation stays a separate, not-yet-designed feature.
+
+## Named ranges (post-MVP, task 10)
+
+Workbook-scoped names (not per-sheet) that resolve to a formula or cell/range
+reference — e.g. `TaxRate` → `=0.08`, or `Revenue` → `=Sheet1!$B$2:$B$12` —
+usable from any formula in the workbook (`=B2 * TaxRate`). Built directly on
+HyperFormula's own native named-expression support
+(`addNamedExpression`/`changeNamedExpression`/`removeNamedExpression`/
+`getNamedExpression`) — no custom name-resolution logic needed, since the
+engine already implements this exactly as a real spreadsheet would.
+
+**UI:** a "Named ranges" button in `WorkbookView.tsx`'s header (next to
+Share), opening a `Dialog` — `_components/NamedRangesDialog.tsx`'s
+`NamedRangesButton`. Same list + add-form shape as `WorkbookShareDialog`.
+Viewing the list is available to any role; adding/removing is `canEdit`-gated
+(this is a workbook-editing concern, not an owner-only one like sharing).
+
+**Persistence:** a new `workbooks.named_ranges_json` column
+(`{ [name]: expression }`), alongside the existing `active_sheet_id` —
+workbook-scoped data, not sheet-scoped, matching HyperFormula's own default
+named-expression scope (global unless a sheet id is explicitly passed). New
+`saveNamedRangesAction` writes the whole map in one call (no per-item CRUD
+action) — the client already holds the authoritative set, mirrored into the
+engine for live formula resolution, same pattern task 9 established for cell
+format overrides.
+
+**Load order matters:** named ranges are registered with the engine *after*
+every sheet has been added (`WorkbookView.tsx`'s engine-setup effect) — an
+expression referencing a sheet (`=Sheet1!$B$2`) throws if that sheet doesn't
+exist in the engine yet.
+
+**Validation is HyperFormula's own** — `addNamedExpression`/
+`changeNamedExpression` throw on an invalid name (spaces, looks like a cell
+reference, etc.) or a malformed expression; `NamedRangesButton` surfaces
+that error message inline in the add form. Not `ActionResult`/
+`useActionState` — like cell formatting, this mutates the client-side engine
+directly, not a server action.
+
+Deliberately out of scope: data validation (restricting what a cell accepts)
+is a genuinely separate feature, not attempted here.
 
 ## Architecture
 
@@ -493,7 +535,7 @@ at `catalog:`; devDeps `drizzle-kit`, `@sovereignfs/tsconfig`,
   general quote interface — this still needs its own design pass, not just
   a second implementation of that interface.
 - Real-time multiplayer editing, presence, comments.
-- Charts, pivot tables, named ranges, data validation.
+- Charts, pivot tables, data validation. (Named ranges shipped, task 10.)
 - Richer cell styling (bold/italic/text color) and conditional formatting —
   task 9 shipped only the number-format enum
   (plain/number/currency/date), see "Cell number formatting" above for what

@@ -21,6 +21,14 @@ export const workbooks = sqliteTable(
     ownerUserId: text('owner_user_id').notNull(),
     name: text('name').notNull(),
     activeSheetId: text('active_sheet_id'),
+    /**
+     * Workbook-scoped named ranges: `{ [name]: expression }`, e.g.
+     * `{ "TaxRate": "=0.08", "Revenue": "=Sheet1!$B$2:$B$12" }`. Workbook-
+     * level, not per-sheet — matches HyperFormula's own default named-
+     * expression scope (global unless a sheet id is passed), and a name is
+     * meant to be usable from any sheet in the workbook.
+     */
+    namedRangesJson: text('named_ranges_json').notNull().default('{}'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
     deletedAt: integer('deleted_at'),

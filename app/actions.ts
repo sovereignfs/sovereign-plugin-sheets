@@ -172,7 +172,7 @@ export async function createWorkbookAction(formData: FormData): Promise<void> {
 }
 
 export interface WorkbookWithSheets {
-  workbook: { id: string; name: string; activeSheetId: string | null };
+  workbook: { id: string; name: string; activeSheetId: string | null; namedRangesJson: string };
   role: WorkbookMemberRole;
   sheets: {
     id: string;
@@ -222,6 +222,7 @@ export async function getWorkbook(workbookId: string): Promise<WorkbookWithSheet
       id: workbook.id,
       name: workbook.name,
       activeSheetId: workbook.activeSheetId,
+      namedRangesJson: workbook.namedRangesJson,
     },
     role,
     sheets: sheetRows.map((s) => ({
@@ -338,6 +339,27 @@ export async function resizeSheetAction(
     .update(sheets)
     .set({ rowCount, colCount, updatedAt: now() })
     .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
+
+  revalidatePath(`/sheets/w/${workbookId}`);
+}
+
+/**
+ * Persists the whole named-ranges map in one write — the client already
+ * holds the authoritative set (it's mirrored into the HyperFormula engine
+ * for live formula resolution), so there's no per-item CRUD action here,
+ * matching how cell format overrides are saved as one map too.
+ */
+export async function saveNamedRangesAction(
+  workbookId: string,
+  namedRangesJson: string,
+): Promise<void> {
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;
+
+  await db
+    .update(workbooks)
+    .set({ namedRangesJson, updatedAt: now() })
+    .where(and(eq(workbooks.id, workbookId), eq(workbooks.tenantId, tenantId)));
 
   revalidatePath(`/sheets/w/${workbookId}`);
 }

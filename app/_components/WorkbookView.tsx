@@ -7,6 +7,7 @@ import { BackLink } from './BackLink';
 import { SheetTabs, type SheetTabItem } from './SheetTabs';
 import { SheetGrid } from './SheetGrid';
 import { WorkbookShareButton } from './WorkbookShareButton';
+import { NamedRangesButton } from './NamedRangesDialog';
 import {
   addSheetAction,
   deleteSheetAction,
@@ -14,6 +15,7 @@ import {
   getFinanceRatesAction,
   renameSheetAction,
   reorderSheetsAction,
+  saveNamedRangesAction,
   saveSheetCellsAction,
   setActiveSheetAction,
 } from '../actions';
@@ -41,6 +43,7 @@ export function WorkbookView({
   workbookId,
   name,
   sheets: initialSheets,
+  namedRangesJson,
   canEdit,
   isOwner,
   listMembersAction,
@@ -51,6 +54,7 @@ export function WorkbookView({
   workbookId: string;
   name: string;
   sheets: WorkbookSheet[];
+  namedRangesJson: string;
   /** Viewer role: grid/tabs render read-only, no Undo/Redo, no Delete workbook. */
   canEdit: boolean;
   /** Owner-only: gates the Share button/dialog. */
@@ -66,6 +70,16 @@ export function WorkbookView({
   const [confirmDeleteWorkbook, setConfirmDeleteWorkbook] = useState(false);
   const [confirmDeleteSheetId, setConfirmDeleteSheetId] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [namedRanges, setNamedRanges] = useState<Record<string, string>>(() => {
+    try {
+      const parsed: unknown = JSON.parse(namedRangesJson);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, string>)
+        : {};
+    } catch {
+      return {};
+    }
+  });
 
   // One HyperFormula instance for the whole workbook (cross-sheet formulas
   // need every sheet loaded), created once and mutated in place.
@@ -87,6 +101,17 @@ export function WorkbookView({
       const cells = parseCellsJson(sheet.cellsJson);
       engine.setSheetContent(hfId, cellsMapToGrid(cells, sheet.rowCount, sheet.colCount));
       formatMaps.current.set(sheet.id, extractCellFormats(cells));
+    }
+    // After every sheet exists — a named expression referencing a sheet
+    // (e.g. "=Sheet1!$B$2") throws if that sheet isn't registered yet.
+    for (const [expressionName, expression] of Object.entries(namedRanges)) {
+      try {
+        engine.addNamedExpression(expressionName, expression);
+      } catch {
+        // Stored data was already validated once, on the add that first
+        // persisted it — a load-time failure here means something upstream
+        // corrupted it; skip it rather than blocking the whole workbook.
+      }
     }
     engineRef.current = engine;
   }
@@ -202,6 +227,34 @@ export function WorkbookView({
     );
   }
 
+  /** Returns an error message on failure (surfaced inline by NamedRangesButton), or undefined on success. */
+  function handleAddNamedRange(expressionName: string, expression: string): string | undefined {
+    if (!engine) return 'Workbook is not ready yet.';
+    const existing = engine.getNamedExpression(expressionName);
+    try {
+      if (existing) engine.changeNamedExpression(expressionName, expression);
+      else engine.addNamedExpression(expressionName, expression);
+    } catch (err) {
+      return err instanceof Error ? err.message : 'That name or expression is not valid.';
+    }
+    const next = { ...namedRanges, [expressionName]: expression };
+    setNamedRanges(next);
+    void saveNamedRangesAction(workbookId, JSON.stringify(next));
+    return undefined;
+  }
+
+  function handleRemoveNamedRange(expressionName: string) {
+    if (!engine) return;
+    try {
+      engine.removeNamedExpression(expressionName);
+    } catch {
+      // Already gone from the engine — still drop it from local/persisted state below.
+    }
+    const { [expressionName]: _removed, ...next } = namedRanges;
+    setNamedRanges(next);
+    void saveNamedRangesAction(workbookId, JSON.stringify(next));
+  }
+
   async function resolveFinancePairs(pairs: { base: string; quote: string }[]) {
     const unresolved = pairs.filter((p) => getCachedRate(p.base, p.quote) === undefined);
     if (unresolved.length === 0) return;
@@ -280,6 +333,15 @@ export function WorkbookView({
               </Button>
             </>
           )}
+          <NamedRangesButton
+            ranges={Object.entries(namedRanges).map(([rangeName, expression]) => ({
+              name: rangeName,
+              expression,
+            }))}
+            canEdit={canEdit}
+            onAdd={handleAddNamedRange}
+            onRemove={handleRemoveNamedRange}
+          />
           {isOwner && (
             <WorkbookShareButton
               listMembersAction={listMembersAction}

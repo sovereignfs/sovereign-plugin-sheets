@@ -25,6 +25,7 @@ export default async function WorkbookPage({
         workbookId={data.workbook.id}
         name={data.workbook.name}
         sheets={data.sheets}
+        namedRangesJson={data.workbook.namedRangesJson}
         canEdit={canEditWorkbookRole(data.role)}
         isOwner={data.role === 'owner'}
         listMembersAction={listWorkbookMembers.bind(null, workbookId)}

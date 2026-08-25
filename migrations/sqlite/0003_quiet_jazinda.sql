@@ -1,0 +1,1 @@
+ALTER TABLE `workbooks` ADD `named_ranges_json` text DEFAULT '{}' NOT NULL;
