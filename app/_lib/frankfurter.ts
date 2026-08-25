@@ -1,21 +1,21 @@
 /**
- * Thin fetch client for Frankfurter (api.frankfurter.dev) — free, no API key
- * required, ECB daily reference rates. See SPEC.md's "The FINANCE() function"
- * for why this provider was chosen over a keyed one.
+ * Frankfurter (api.frankfurter.dev) — free, no API key required, ECB daily
+ * reference rates. See SPEC.md's "The FINANCE() function" for why this
+ * provider was chosen. Implements `FxRateProvider` (`fx-rate-provider.ts`)
+ * — the currently-active provider, swapped in at `app/actions.ts`'s single
+ * `FX_PROVIDER` binding.
  */
 
-export interface FrankfurterResponse {
+import type { FxRateProvider, FxRateProviderResult } from './fx-rate-provider';
+
+interface FrankfurterResponse {
   amount: number;
   base: string;
   date: string;
   rates: Record<string, number>;
 }
 
-/** Fetches rates for `base` -> each of `quotes` in one batched request. Returns null on any failure. */
-export async function fetchFrankfurterRates(
-  base: string,
-  quotes: string[],
-): Promise<FrankfurterResponse | null> {
+async function fetchFrankfurterRates(base: string, quotes: string[]): Promise<FrankfurterResponse | null> {
   if (quotes.length === 0) return null;
   try {
     const url = `https://api.frankfurter.dev/v1/latest?base=${encodeURIComponent(base)}&symbols=${encodeURIComponent(quotes.join(','))}`;
@@ -26,3 +26,11 @@ export async function fetchFrankfurterRates(
     return null;
   }
 }
+
+export const frankfurterProvider: FxRateProvider = {
+  id: 'frankfurter',
+  async getRates(base, quotes): Promise<FxRateProviderResult | null> {
+    const fetched = await fetchFrankfurterRates(base, quotes);
+    return fetched ? { date: fetched.date, rates: fetched.rates } : null;
+  },
+};

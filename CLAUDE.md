@@ -114,4 +114,4 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.2.0** (task 6 — home redesign + workbook sharing, see ROADMAP.md)
+Current version: **0.2.1** (task 7 — `FxRateProvider` abstraction behind `FINANCE()`'s currency conversion, no behavior change, see ROADMAP.md)

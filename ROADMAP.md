@@ -42,14 +42,17 @@ alongside richer cell formatting, since both want the same selection concept.
 | # | Task | Spec ref | Depends on | Status |
 | - | ---- | -------- | ---------- | ------ |
 | 6 | **Home redesign + workbook sharing** — `ThreeColumnLayout` home (`SheetsSidebar`: Workbooks/Inbox nav + Recent list; main content: My workbooks/Shared with me), `workbook_members` table (owner/editor/viewer), `resolveWorkbookRole()` authorization on every action, owner-only Share dialog, viewer-mode read-only grid, Inbox digest, route move to `/sheets/w/[id]` | [docs/adhoc/home-and-sharing.md](docs/adhoc/home-and-sharing.md), SPEC.md's "Workbook sharing" | Task 5 | ✅ |
+| 7 | **FX-provider abstraction** — extracted `FxRateProvider` interface (`_lib/fx-rate-provider.ts`); Frankfurter is now one implementation (`frankfurterProvider`) behind it, swapped in at `actions.ts`'s single `FX_PROVIDER` binding. Currency conversion only — no behavior change, no new provider added yet. Scoped narrowly ahead of task 8 below so that task doesn't have to touch the caching/formula-engine integration layer, just add a new provider implementation. | SPEC.md's "The `FINANCE()` function" | Task 6 | ✅ |
 
 ## Post-MVP (not scheduled)
 
 See SPEC.md's "Post-MVP" section for the full list. Roughly, in likely order
-of value now that task 6 has shipped:
+of value now that tasks 6–7 have shipped:
 
-1. Stock/security quotes as a `FINANCE()` extension (needs a keyed provider +
-   the admin-secrets/Console-settings workflow this MVP deliberately avoids).
+1. Stock/security quotes as a `FINANCE()` extension. Task 7 built the
+   swappable-provider plumbing this needs; still blocked on picking an
+   actual keyed provider + building the admin-secrets/Console-settings
+   workflow this MVP has otherwise avoided.
 2. CSV import.
 3. Richer cell formatting / conditional formatting.
 4. Named ranges, data validation.

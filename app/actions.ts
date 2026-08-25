@@ -9,12 +9,20 @@ import { financeRateCache, sheets, workbookMembers, workbooks } from './_db/sche
 import { DEFAULT_COL_COUNT, DEFAULT_ROW_COUNT } from './_lib/config';
 import { type Db, getContext, now } from './_lib/context';
 import { formString } from './_lib/formUtils';
-import { fetchFrankfurterRates } from './_lib/frankfurter';
+import { frankfurterProvider } from './_lib/frankfurter';
+import type { FxRateProvider } from './_lib/fx-rate-provider';
 import { pairKey } from './_lib/finance-function';
 import { canEditWorkbookRole, type WorkbookMemberRole } from './_lib/workbook-rules';
 
 const RECENT_WORKBOOKS_LIMIT = 8;
 const FINANCE_RATE_TTL_SECONDS = 6 * 60 * 60;
+
+/**
+ * The single swap point for FINANCE()'s currency-conversion provider — see
+ * `_lib/fx-rate-provider.ts`'s own docblock. Swapping providers means
+ * writing a new `FxRateProvider` and changing this one binding.
+ */
+const FX_PROVIDER: FxRateProvider = frankfurterProvider;
 
 /** A user's role for one workbook, or `null` if they have no `workbook_members` row at all. */
 export async function resolveWorkbookRole(
@@ -429,10 +437,10 @@ export async function getFinanceRatesAction(
   }
 
   for (const [base, quotes] of toFetch) {
-    const fetched = await fetchFrankfurterRates(base, [...quotes]);
+    const fetched = await FX_PROVIDER.getRates(base, [...quotes]);
 
     if (!fetched) {
-      // Frankfurter unreachable — serve stale cache if we have it, else null.
+      // Provider unreachable — serve stale cache if we have it, else null.
       for (const quote of quotes) {
         const key = pairKey(base, quote);
         const [cached] = await client
@@ -457,10 +465,10 @@ export async function getFinanceRatesAction(
       const rateStr = String(rate);
       await client
         .insert(financeRateCache)
-        .values({ base, quote, rate: rateStr, asOf, fetchedAt: nowTs, source: 'frankfurter' })
+        .values({ base, quote, rate: rateStr, asOf, fetchedAt: nowTs, source: FX_PROVIDER.id })
         .onConflictDoUpdate({
           target: [financeRateCache.base, financeRateCache.quote],
-          set: { rate: rateStr, asOf, fetchedAt: nowTs, source: 'frankfurter' },
+          set: { rate: rateStr, asOf, fetchedAt: nowTs, source: FX_PROVIDER.id },
         });
     }
   }

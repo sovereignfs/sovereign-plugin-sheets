@@ -117,9 +117,16 @@ calls:
   business days) checked before any upstream call.
 - No usage-quota tracking needed — Frankfurter is keyless with no quota to
   track against, unlike a metered provider.
-- Build the provider client behind a small interface (`getRate(base, quote):
-  Promise<{rate, asOf}>`) so a different provider could be swapped in later
-  without touching the formula-engine integration layer.
+- **Resolved, task 7:** the provider client sits behind a small interface,
+  `FxRateProvider` (`_lib/fx-rate-provider.ts`) — `getRates(base, quotes):
+  Promise<{date, rates} | null>`. Frankfurter (`_lib/frankfurter.ts`'s
+  `frankfurterProvider`) is the sole implementation today, wired in at
+  `actions.ts`'s single `FX_PROVIDER` binding; swapping providers means
+  writing a new implementation and changing that one line, without touching
+  `getFinanceRatesAction`'s caching/TTL/dedup logic or the formula-engine
+  integration in `finance-function.ts`/`WorkbookView.tsx`. Currency
+  conversion only — not a general quote/ticker abstraction; extending to
+  stock/security quotes is its own task (see "Post-MVP").
 
 **Failure mode:** if Frankfurter is unreachable, serve the last-cached rate
 with a "stale" indicator if one exists, or a clear in-cell error if no cache
@@ -380,7 +387,10 @@ at `catalog:`; devDeps `drizzle-kit`, `@sovereignfs/tsconfig`,
 
 - Stock/security quotes and additional `FINANCE()` attributes
   (`"high"`/`"low"`/`"volume"`/historical ranges), once a suitable quoted-key
-  provider and admin-config workflow are worth the complexity.
+  provider and admin-config workflow are worth the complexity. Task 7's
+  `FxRateProvider` abstraction is currency-conversion-only by design, not a
+  general quote interface — this still needs its own design pass, not just
+  a second implementation of that interface.
 - Real-time multiplayer editing, presence, comments.
 - Charts, pivot tables, conditional formatting, named ranges, data
   validation, richer cell styling.
