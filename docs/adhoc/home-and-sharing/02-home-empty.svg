@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" font-family="-apple-system, 'Segoe UI', sans-serif">
+  <rect width="1200" height="700" fill="#fafafa"/>
+
+  <rect x="0" y="0" width="280" height="700" fill="#f4f4f5"/>
+  <line x1="280" y1="0" x2="280" y2="700" stroke="#e4e4e7"/>
+
+  <rect x="16" y="16" width="248" height="36" rx="8" fill="#e4e4e7"/>
+  <text x="52" y="39" font-size="14" font-weight="600" fill="#18181b">Workbooks</text>
+  <text x="52" y="79" font-size="14" fill="#52525b">Inbox</text>
+
+  <line x1="16" y1="104" x2="264" y2="104" stroke="#e4e4e7"/>
+  <text x="16" y="128" font-size="11" font-weight="600" letter-spacing="0.04em" fill="#71717a">RECENT</text>
+  <text x="16" y="150" font-size="12" fill="#a1a1aa">You haven't opened any</text>
+  <text x="16" y="168" font-size="12" fill="#a1a1aa">workbooks yet.</text>
+
+  <!-- Page header, no search (matches Docs suppressing search on the empty state) -->
+  <text x="312" y="56" font-size="24" font-weight="700" fill="#18181b">Sheets</text>
+  <text x="312" y="78" font-size="14" fill="#71717a">Your spreadsheets.</text>
+
+  <!-- EmptyState, centered in main -->
+  <g>
+    <circle cx="740" cy="330" r="36" fill="#f4f4f5"/>
+    <rect x="722" y="316" width="36" height="28" rx="4" fill="none" stroke="#a1a1aa" stroke-width="2"/>
+    <line x1="722" y1="330" x2="758" y2="330" stroke="#a1a1aa" stroke-width="1.5"/>
+    <line x1="740" y1="316" x2="740" y2="344" stroke="#a1a1aa" stroke-width="1.5"/>
+    <text x="740" y="404" font-size="17" font-weight="600" fill="#18181b" text-anchor="middle">No workbooks yet</text>
+    <text x="740" y="428" font-size="14" fill="#71717a" text-anchor="middle">Create your first workbook to get started.</text>
+    <rect x="664" y="452" width="152" height="38" rx="8" fill="#18181b"/>
+    <text x="740" y="476" font-size="13" fill="#ffffff" text-anchor="middle">New workbook</text>
+  </g>
+
+  <text x="312" y="600" font-size="12" fill="#a1a1aa">Shown only when the user owns zero workbooks and has none shared with them — same "both flavours" empty-state rule as Docs/Kanban.</text>
+  <text x="312" y="620" font-size="12" fill="#a1a1aa">Recent group always renders (even empty) so the sidebar shape never shifts — matches DocsSidebar's always-visible "Shared with me" group.</text>
+</svg>
