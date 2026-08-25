@@ -42,22 +42,24 @@ alongside richer cell formatting, since both want the same selection concept.
 | # | Task | Spec ref | Depends on | Status |
 | - | ---- | -------- | ---------- | ------ |
 | 6 | **Home redesign + workbook sharing** — `ThreeColumnLayout` home (`SheetsSidebar`: Workbooks/Inbox nav + Recent list; main content: My workbooks/Shared with me), `workbook_members` table (owner/editor/viewer), `resolveWorkbookRole()` authorization on every action, owner-only Share dialog, viewer-mode read-only grid, Inbox digest, route move to `/sheets/w/[id]` | [docs/adhoc/home-and-sharing.md](docs/adhoc/home-and-sharing.md), SPEC.md's "Workbook sharing" | Task 5 | ✅ |
-| 7 | **FX-provider abstraction** — extracted `FxRateProvider` interface (`_lib/fx-rate-provider.ts`); Frankfurter is now one implementation (`frankfurterProvider`) behind it, swapped in at `actions.ts`'s single `FX_PROVIDER` binding. Currency conversion only — no behavior change, no new provider added yet. Scoped narrowly ahead of task 8 below so that task doesn't have to touch the caching/formula-engine integration layer, just add a new provider implementation. | SPEC.md's "The `FINANCE()` function" | Task 6 | ✅ |
+| 7 | **FX-provider abstraction** — extracted `FxRateProvider` interface (`_lib/fx-rate-provider.ts`); Frankfurter is now one implementation (`frankfurterProvider`) behind it, swapped in at `actions.ts`'s single `FX_PROVIDER` binding. Currency conversion only — no behavior change, no new provider added yet. Scoped narrowly ahead of the not-yet-scheduled stock-quotes task (Post-MVP item 1 below) so that future task only has to add a new provider implementation, not touch the caching/formula-engine integration layer. Not a dependency of task 8 below — CSV import is unrelated. | SPEC.md's "The `FINANCE()` function" | Task 6 | ✅ |
+| 8 | **CSV import** — single-sheet, full-replace (not merge). `_lib/csv.ts`'s `parseCsv()` (RFC 4180-ish, inverse of `cellsToCsv()`), "Import CSV" toolbar button next to "Export CSV" (`canEdit`-gated), `ConfirmDialog` naming the file/sheet, sheet grows to fit a larger CSV via new `resizeSheetAction` (capped at `MAX_IMPORT_ROW_COUNT`/`MAX_IMPORT_COL_COUNT`). No manifest permission change — client-side file read, not the platform's `data:import` portability flow. | SPEC.md's "CSV import" | Task 7 | ✅ |
 
 ## Post-MVP (not scheduled)
 
 See SPEC.md's "Post-MVP" section for the full list. Roughly, in likely order
-of value now that tasks 6–7 have shipped:
+of value now that tasks 6–8 have shipped:
 
 1. Stock/security quotes as a `FINANCE()` extension. Task 7 built the
    swappable-provider plumbing this needs; still blocked on picking an
    actual keyed provider + building the admin-secrets/Console-settings
    workflow this MVP has otherwise avoided.
-2. CSV import.
-3. Richer cell formatting / conditional formatting.
-4. Named ranges, data validation.
-5. Charts.
-6. Real-time multiplayer editing (largest lift — conflict resolution,
+2. Richer cell formatting / conditional formatting.
+3. Named ranges, data validation.
+4. Charts.
+5. Real-time multiplayer editing (largest lift — conflict resolution,
    presence, likely a data-model change to per-cell rows; workbook sharing,
    task 6, is access control only — this is a separate, much larger
    collaboration feature).
+6. XLSX import/export (either direction) — CSV import/export are the only
+   spreadsheet formats supported today (tasks 5 and 8).

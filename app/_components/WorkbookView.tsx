@@ -283,6 +283,13 @@ export function WorkbookView({
           version={version}
           onVersionChange={setVersion}
           onCellCommitted={handleCellCommitted}
+          onSheetResized={(nextRowCount, nextColCount) => {
+            setSheetList((prev) =>
+              prev.map((s) =>
+                s.id === activeSheet.id ? { ...s, rowCount: nextRowCount, colCount: nextColCount } : s,
+              ),
+            );
+          }}
           canEdit={canEdit}
         />
       )}

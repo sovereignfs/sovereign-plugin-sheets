@@ -31,17 +31,20 @@ Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
 The long-term ambition is a real Google Sheets alternative. **The MVP is
 deliberately narrow** — single-workbook-per-doc, no real-time collaboration,
-no charts/pivot tables/conditional formatting, CSV export only (no import).
+no charts/pivot tables/conditional formatting, no XLSX import/export.
 Don't let "make it feel like Google Sheets" pull scope back in during
 implementation; SPEC.md's "Post-MVP" section is where deferred features are
 tracked, not silently reintroduced into an MVP task.
 
-**Workbook sharing is the one deliberate exception** — it shipped post-MVP
-(task 6) as a scoped-in addition, not scope creep: SPEC.md's "Workbook
-sharing" section is the design record. It's still *workbook-level* sharing
-only (no per-sheet sharing, no real-time multiplayer/presence/comments —
-those stay out per the bullet above). Don't conflate "sharing shipped" with
-"collaboration shipped."
+**Workbook sharing (task 6) and CSV import (task 8) are the deliberate
+exceptions** — both shipped post-MVP as scoped-in additions, not scope
+creep: SPEC.md's "Workbook sharing"/"CSV import" sections are the design
+records. Sharing is still *workbook-level* only (no per-sheet sharing, no
+real-time multiplayer/presence/comments — those stay out per the bullet
+above); CSV import is still *single-sheet, full-replace* only (no
+full-workbook import, no XLSX, no merge-with-existing-data mode). Don't
+conflate "sharing/import shipped" with "collaboration/full-fidelity import
+shipped."
 
 ## `FINANCE()` is currency conversion only
 
@@ -114,4 +117,4 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.2.1** (task 7 — `FxRateProvider` abstraction behind `FINANCE()`'s currency conversion, no behavior change, see ROADMAP.md)
+Current version: **0.3.0** (task 8 — single-sheet CSV import, full-replace semantics, see ROADMAP.md)

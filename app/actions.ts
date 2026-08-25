@@ -318,6 +318,30 @@ export async function renameSheetAction(
   revalidatePath(`/sheets/w/${workbookId}`);
 }
 
+/**
+ * Grows (never shrinks) a sheet's stored dimensions — used by CSV import
+ * when the imported file is larger than the sheet's current grid, so the
+ * new cells are actually rendered/persisted on future loads (`SheetGrid`
+ * renders exactly `rowCount`/`colCount` rows/cols, not whatever the client
+ * HyperFormula engine happens to hold in memory).
+ */
+export async function resizeSheetAction(
+  sheetId: string,
+  workbookId: string,
+  rowCount: number,
+  colCount: number,
+): Promise<void> {
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;
+
+  await db
+    .update(sheets)
+    .set({ rowCount, colCount, updatedAt: now() })
+    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
+
+  revalidatePath(`/sheets/w/${workbookId}`);
+}
+
 export async function deleteSheetAction(sheetId: string, workbookId: string): Promise<void> {
   const { db, userId, tenantId } = await getContext();
   if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;

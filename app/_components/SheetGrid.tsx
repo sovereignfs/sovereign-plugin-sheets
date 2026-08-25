@@ -2,11 +2,12 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { HyperFormula } from 'hyperformula';
-import { Button, StatusBadge, useToast, type StatusBadgeStatus } from '@sovereignfs/ui';
-import { saveSheetCellsAction } from '../actions';
+import { Button, ConfirmDialog, StatusBadge, useToast, type StatusBadgeStatus } from '@sovereignfs/ui';
+import { resizeSheetAction, saveSheetCellsAction } from '../actions';
 import { cellKey, colIndexToLetters } from '../_lib/a1';
 import { serializeCellsJson } from '../_lib/cells';
-import { cellsToCsv, downloadCsv } from '../_lib/csv';
+import { MAX_IMPORT_COL_COUNT, MAX_IMPORT_ROW_COUNT } from '../_lib/config';
+import { cellsToCsv, downloadCsv, parseCsv } from '../_lib/csv';
 import { displayValue, gridToCellsMap } from '../_lib/formula-engine';
 import { FormulaBar } from './FormulaBar';
 import styles from './SheetGrid.module.css';
@@ -24,6 +25,7 @@ export function SheetGrid({
   version,
   onVersionChange,
   onCellCommitted,
+  onSheetResized,
   canEdit,
 }: {
   engine: HyperFormula;
@@ -36,13 +38,18 @@ export function SheetGrid({
   version: number;
   onVersionChange: (next: number) => void;
   onCellCommitted?: (raw: string) => void;
-  /** Viewer role: grid and formula bar render read-only, no autosave, no fill-down. */
+  /** CSV import grew the sheet past its current stored dimensions — update the caller's own row/col state. */
+  onSheetResized?: (rowCount: number, colCount: number) => void;
+  /** Viewer role: grid and formula bar render read-only, no autosave, no fill-down, no import. */
   canEdit: boolean;
 }) {
   const [status, setStatus] = useState<StatusBadgeStatus>('synced');
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const importInputRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
 
   const columnLabels = useMemo(
@@ -141,6 +148,81 @@ export function SheetGrid({
     downloadCsv(`${sheetName}.csv`, cellsToCsv(rows));
   }
 
+  function handleImportClick() {
+    importInputRef.current?.click();
+  }
+
+  function handleImportFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file next time
+    if (file) setPendingImportFile(file);
+  }
+
+  async function handleConfirmImport() {
+    const file = pendingImportFile;
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const parsed = parseCsv(text);
+      if (parsed.length === 0) {
+        toast.show({ title: 'Nothing to import', message: `${file.name} has no rows.`, category: 'error' });
+        return;
+      }
+
+      const importedRowCount = parsed.length;
+      // Not Math.max(...parsed.map(...)) — a spread of one arg per row can
+      // blow the call stack on a large file; reduce has no such limit.
+      const importedColCount = parsed.reduce((max, r) => Math.max(max, r.length), 1);
+      const nextRowCount = Math.min(Math.max(rowCount, importedRowCount), MAX_IMPORT_ROW_COUNT);
+      const nextColCount = Math.min(Math.max(colCount, importedColCount), MAX_IMPORT_COL_COUNT);
+
+      if (nextRowCount > rowCount) engine.addRows(hfSheetId, [rowCount, nextRowCount - rowCount]);
+      if (nextColCount > colCount) engine.addColumns(hfSheetId, [colCount, nextColCount - colCount]);
+
+      // Spans the full next-size grid (>= the sheet's prior size), not just
+      // the imported range, so any pre-existing content outside the CSV's
+      // own dimensions is actually cleared — a true replace, matching the
+      // confirm dialog's own copy, not a patch of the overlapping region.
+      const clippedRows = Math.min(importedRowCount, nextRowCount);
+      const clippedCols = Math.min(importedColCount, nextColCount);
+      const values: (string | null)[][] = [];
+      for (let row = 0; row < nextRowCount; row++) {
+        const line: (string | null)[] = [];
+        for (let col = 0; col < nextColCount; col++) {
+          const raw = row < clippedRows && col < clippedCols ? (parsed[row]?.[col] ?? '') : '';
+          line.push(raw === '' ? null : raw);
+        }
+        values.push(line);
+      }
+      engine.setCellContents({ sheet: hfSheetId, row: 0, col: 0 }, values);
+
+      if (nextRowCount !== rowCount || nextColCount !== colCount) {
+        void resizeSheetAction(sheetId, workbookId, nextRowCount, nextColCount);
+        onSheetResized?.(nextRowCount, nextColCount);
+      }
+
+      onVersionChange(version + 1);
+      scheduleSave();
+
+      const clipped = importedRowCount > nextRowCount || importedColCount > nextColCount;
+      toast.show({
+        title: 'Workbook imported',
+        message: `Imported ${clippedRows} row${clippedRows === 1 ? '' : 's'} from ${file.name} into ${sheetName}, replacing its existing cells.${clipped ? ' Some rows/columns beyond the size limit were skipped.' : ''}`,
+        category: clipped ? 'warning' : 'success',
+      });
+    } catch {
+      toast.show({
+        title: 'Could not import file',
+        message: `${file.name} could not be read as CSV.`,
+        category: 'error',
+      });
+    } finally {
+      setImporting(false);
+      setPendingImportFile(null);
+    }
+  }
+
   return (
     <div className={styles.wrapper}>
       <FormulaBar
@@ -156,6 +238,21 @@ export function SheetGrid({
         <Button variant="ghost" size="sm" onClick={handleExportCsv}>
           Export CSV
         </Button>
+        {canEdit && (
+          <>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className={styles.hiddenFileInput}
+              onChange={handleImportFileChange}
+              aria-label="Import CSV file"
+            />
+            <Button variant="ghost" size="sm" onClick={handleImportClick}>
+              Import CSV
+            </Button>
+          </>
+        )}
         {canEdit && <StatusBadge status={status} />}
       </div>
       <div className={styles.scroller}>
@@ -200,6 +297,22 @@ export function SheetGrid({
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={pendingImportFile !== null}
+        onClose={() => setPendingImportFile(null)}
+        title="Import CSV"
+        message={
+          <>
+            Import <strong>{pendingImportFile?.name}</strong> into <strong>{sheetName}</strong>?
+            This replaces every cell currently in this sheet and can&apos;t be undone.
+          </>
+        }
+        onConfirm={() => void handleConfirmImport()}
+        confirmLabel={importing ? 'Importing…' : 'Import'}
+        destructive
+        pending={importing}
+      />
     </div>
   );
 }

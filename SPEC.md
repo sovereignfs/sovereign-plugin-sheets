@@ -57,7 +57,8 @@ explicitly future work, tracked in "Post-MVP" below, not designed away.
   minimal format enum, data validation, named ranges.
 - Sharing/permissions beyond a single owner per workbook (shipped post-MVP,
   task 6 — see "Workbook sharing" below).
-- XLSX/CSV *import* (export only in MVP).
+- XLSX import/export (stays deferred). CSV import shipped post-MVP, task 8
+  — see "CSV import" below.
 - Stock/ticker quotes or any `FINANCE()` attribute beyond a currency rate;
   historical time-series lookups.
 
@@ -261,6 +262,40 @@ permission.
 member removal — an editor/viewer who loses access mid-session keeps
 working until their next page load, same as Docs/Kanban.
 
+## CSV import (post-MVP, task 8)
+
+Single-sheet only, symmetric with export's own scope (SPEC's original "CSV
+export scope" open question resolved it there too). Entry point: an "Import
+CSV" toolbar button next to "Export CSV" in `SheetGrid.tsx`, `canEdit`-gated
+(same as every other mutation). No manifest permission change — like export,
+this is a client-side file read, not the platform's account-level
+`portability.provideImport()` flow (`data:import` gates that, not this).
+
+**Behavior — a full replace, not a merge:** importing clears every existing
+cell in the active sheet and writes the CSV's own content in its place, via
+one `ConfirmDialog` naming the file and the sheet, `destructive`-styled. If
+the CSV is larger than the sheet's current `rowCount`/`colCount`, the sheet
+grows to fit (via a new `resizeSheetAction`, capped at `MAX_IMPORT_ROW_COUNT`
+2000 / `MAX_IMPORT_COL_COUNT` 100 — a sanity bound against a malformed/huge
+file, not a product limit); rows/columns beyond that cap are silently
+clipped, with a toast noting it.
+
+**Parsing:** `_lib/csv.ts`'s new `parseCsv()`, the inverse of the existing
+`cellsToCsv()` — RFC 4180-ish (quoted fields, embedded commas, `""` for a
+literal quote, both `\r\n`/`\n` line endings). Every CSV cell becomes a raw
+value fed through the same `engine.setCellContents()` path normal typing
+uses — a bare `=...` field is interpreted as a formula, same as if the user
+had typed it directly. This matches real spreadsheet software's own
+paste/import behavior; not specially blocked, since the importer is already
+an editor/owner of their own workbook, not an untrusted multi-tenant input.
+
+**Known minor limitation:** a CSV field containing an embedded newline
+(inside quotes, e.g. `"line1\nline2"`) parses correctly as one field, but
+doesn't round-trip through the grid's single-line `<input>` cell editor —
+the newline is lost on display/re-save. Not chased further for MVP scope;
+revisit if it proves to matter in practice (would need a multi-line cell
+editor, a larger change).
+
 ## Architecture
 
 ```
@@ -343,11 +378,12 @@ actions), `EmptyState` (no-workbooks state).
 - `auth:session` + `db:readWrite` + `notifications:send` (task 6, workbook
   sharing — the in-app "shared a workbook with you" notification). No
   `mailer:send` — sharing notifies in-app only, no email (see "Workbook
-  sharing" above). No `data:export` — CSV export is a client-side `Blob`
-  download, not the `portability.provideExport()` flow. No `activity:write`
-  — no `sdk.activity.log()` calls exist. No `data:import` (no CSV import in
-  MVP), no invented permission for a settings gate — none needed since
-  `FINANCE()` requires no secret.
+  sharing" above). No `data:export`/`data:import` — CSV export and import
+  (task 8) are both a client-side `Blob` download/file read, not the
+  platform's `portability.provideExport()`/`provideImport()` account-level
+  flow. No `activity:write` — no `sdk.activity.log()` calls exist. No
+  invented permission for a settings gate — none needed since `FINANCE()`
+  requires no secret.
 - No `database` field in the manifest — the per-plugin `isolation`/`dialect`
   overrides were both retired platform-wide; every sovereign/community plugin
   is now unconditionally isolated, with dialect set instance-wide via
@@ -381,7 +417,9 @@ at `catalog:`; devDeps `drizzle-kit`, `@sovereignfs/tsconfig`,
    problem in practice — the provider-client interface in "The `FINANCE()`
    function" section keeps a swap possible.
 3. **CSV export scope — resolved, shipped in MVP** (single sheet only via a
-   toolbar button; full workbook export and any import stay post-MVP).
+   toolbar button; full-workbook export stays post-MVP). **CSV import —
+   resolved, shipped post-MVP (task 8)**, same single-sheet scope, full
+   replace not merge; XLSX (either direction) stays post-MVP.
 
 ## Post-MVP (tracked, not designed in detail yet)
 
@@ -394,4 +432,4 @@ at `catalog:`; devDeps `drizzle-kit`, `@sovereignfs/tsconfig`,
 - Real-time multiplayer editing, presence, comments.
 - Charts, pivot tables, conditional formatting, named ranges, data
   validation, richer cell styling.
-- XLSX import/export, CSV import.
+- XLSX import/export (either direction).
