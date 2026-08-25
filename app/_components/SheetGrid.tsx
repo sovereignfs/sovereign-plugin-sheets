@@ -2,17 +2,31 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { HyperFormula } from 'hyperformula';
-import { Button, ConfirmDialog, StatusBadge, useToast, type StatusBadgeStatus } from '@sovereignfs/ui';
+import {
+  Button,
+  ConfirmDialog,
+  Select,
+  StatusBadge,
+  useToast,
+  type StatusBadgeStatus,
+} from '@sovereignfs/ui';
 import { resizeSheetAction, saveSheetCellsAction } from '../actions';
 import { cellKey, colIndexToLetters } from '../_lib/a1';
-import { serializeCellsJson } from '../_lib/cells';
+import { CELL_FORMATS, mergeCellFormats, serializeCellsJson, type CellFormat } from '../_lib/cells';
 import { MAX_IMPORT_COL_COUNT, MAX_IMPORT_ROW_COUNT } from '../_lib/config';
 import { cellsToCsv, downloadCsv, parseCsv } from '../_lib/csv';
 import { displayValue, gridToCellsMap } from '../_lib/formula-engine';
+import { formatCellValue } from '../_lib/format';
 import { FormulaBar } from './FormulaBar';
 import styles from './SheetGrid.module.css';
 
 const AUTOSAVE_DELAY_MS = 1200;
+const FORMAT_LABELS: Record<CellFormat, string> = {
+  plain: 'Plain',
+  number: 'Number',
+  currency: 'Currency',
+  date: 'Date',
+};
 
 export function SheetGrid({
   engine,
@@ -26,6 +40,8 @@ export function SheetGrid({
   onVersionChange,
   onCellCommitted,
   onSheetResized,
+  formatMap,
+  onFormatChange,
   canEdit,
 }: {
   engine: HyperFormula;
@@ -40,7 +56,10 @@ export function SheetGrid({
   onCellCommitted?: (raw: string) => void;
   /** CSV import grew the sheet past its current stored dimensions — update the caller's own row/col state. */
   onSheetResized?: (rowCount: number, colCount: number) => void;
-  /** Viewer role: grid and formula bar render read-only, no autosave, no fill-down, no import. */
+  /** Per-cell number-format overrides for the active sheet, keyed by A1 cell key. */
+  formatMap: Record<string, CellFormat>;
+  onFormatChange: (cellKey: string, fmt: CellFormat) => void;
+  /** Viewer role: grid and formula bar render read-only, no autosave, no fill-down, no import, no format changes. */
   canEdit: boolean;
 }) {
   const [status, setStatus] = useState<StatusBadgeStatus>('synced');
@@ -65,7 +84,10 @@ export function SheetGrid({
   }
 
   function getDisplay(row: number, col: number): string {
-    return displayValue(engine.getCellValue({ sheet: hfSheetId, row, col }));
+    const value = engine.getCellValue({ sheet: hfSheetId, row, col });
+    const raw = displayValue(value);
+    const fmt = formatMap[cellKey(row, col)];
+    return formatCellValue(raw, fmt, value, engine);
   }
 
   function scheduleSave() {
@@ -73,7 +95,8 @@ export function SheetGrid({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const grid = engine.getSheetSerialized(hfSheetId);
-      void saveSheetCellsAction(workbookId, sheetId, serializeCellsJson(gridToCellsMap(grid)))
+      const cells = mergeCellFormats(gridToCellsMap(grid), formatMap);
+      void saveSheetCellsAction(workbookId, sheetId, serializeCellsJson(cells))
         .then(() => setStatus('synced'))
         .catch(() => {
           setStatus('error');
@@ -235,6 +258,23 @@ export function SheetGrid({
         }}
       />
       <div className={styles.toolbar}>
+        <Select
+          size="sm"
+          className={styles.formatSelect}
+          value={activeCell ? (formatMap[cellKey(activeCell.row, activeCell.col)] ?? 'plain') : 'plain'}
+          onChange={(e) => {
+            if (activeCell) onFormatChange(cellKey(activeCell.row, activeCell.col), e.target.value as CellFormat);
+          }}
+          disabled={!activeCell || !canEdit}
+          aria-label="Cell format"
+        >
+          {CELL_FORMATS.map((fmt) => (
+            <option key={fmt} value={fmt}>
+              {FORMAT_LABELS[fmt]}
+            </option>
+          ))}
+        </Select>
+        <div className={styles.toolbarSpacer} />
         <Button variant="ghost" size="sm" onClick={handleExportCsv}>
           Export CSV
         </Button>

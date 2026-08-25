@@ -37,7 +37,10 @@ explicitly future work, tracked in "Post-MVP" below, not designed away.
   row/column grid.
 - Cell editing: text, numbers, formulas (`=...`).
 - Minimal display formatting: a small enum (plain / number / currency / date)
-  — not a full style/formatting engine.
+  — not a full style/formatting engine. **Note:** this enum was speced and
+  typed (`CellData.fmt`) from task 1 on, but had no UI and no display logic
+  wired to it — a real scope gap, not a deliberate stub — until it actually
+  shipped post-MVP, task 9. See "Cell number formatting" below.
 - Formula engine: arithmetic operators, cell references (`A1`), ranges
   (`A1:B10`), cross-sheet references (`Sheet2!A1`).
 - Built-in function library (provided natively by the formula engine — no
@@ -54,7 +57,8 @@ explicitly future work, tracked in "Post-MVP" below, not designed away.
 
 - Real-time multiplayer editing, live cursors/presence, comments.
 - Charts, pivot tables, conditional formatting, cell styling beyond the
-  minimal format enum, data validation, named ranges.
+  minimal format enum (no bold/italic/color — task 9 wired up the format
+  enum only), data validation, named ranges.
 - Sharing/permissions beyond a single owner per workbook (shipped post-MVP,
   task 6 — see "Workbook sharing" below).
 - XLSX import/export (stays deferred). CSV import shipped post-MVP, task 8
@@ -296,6 +300,65 @@ the newline is lost on display/re-save. Not chased further for MVP scope;
 revisit if it proves to matter in practice (would need a multi-line cell
 editor, a larger change).
 
+## Cell number formatting (post-MVP, task 9)
+
+Finishes the `CellData.fmt` enum (plain/number/currency/date) that was typed
+since task 1 but had no UI or display logic wired to it — see the note on
+MVP scope's "Minimal display formatting" bullet above. **This is a partial
+slice of "richer cell formatting / conditional formatting"** — deliberately
+scoped down to just the number-format enum for this task; bold/italic/text
+color and conditional formatting are explicitly *not* included here (see
+"Deliberately deferred" below), so the underlying per-cell-metadata
+mechanism this task introduces gets proven with one concern before more are
+layered onto it.
+
+**UI:** a `Select` in `SheetGrid.tsx`'s toolbar (left side, next to the
+existing right-aligned Export/Import CSV group), showing/editing the active
+cell's format. Disabled when no cell is active or `!canEdit` (same pattern
+as the formula bar). Applies only to the *display* value (`getDisplay`) —
+the active cell's raw input (formula/typed value, shown while editing) is
+never reformatted, matching how Excel/Sheets only format the settled value.
+
+**Data flow — the real design problem this task solves:** the HyperFormula
+engine only knows cell values/formulas, never this plugin's own `fmt`
+metadata, so format overrides are tracked in a separate in-memory map
+(`WorkbookView.tsx`'s `formatMaps`, one `Record<cellKey, CellFormat>` per
+sheet — same "alongside the engine, not in it" pattern as
+`finance-function.ts`'s rate cache) and merged back into the serialized
+cells at every save point:
+
+- **Load:** `_lib/cells.ts`'s new `extractCellFormats()` pulls the format
+  overrides back out of each sheet's loaded `cellsJson` when the engine is
+  first built.
+- **Save:** `_lib/cells.ts`'s new `mergeCellFormats()` layers the format map
+  onto the engine-derived cell values immediately before
+  `serializeCellsJson()` — used by both `SheetGrid`'s own debounced autosave
+  and `WorkbookView`'s `saveAllSheets()` (the undo/redo save path).
+- **Format changes save immediately**, not debounced — a `Select` change is
+  a discrete, infrequent action, unlike keystroke-by-keystroke typing.
+- `serializeCellsJson()` now also keeps a cell with a non-default `fmt` even
+  if it has no value yet (formatting a column ahead of typing into it) —
+  previously it dropped any cell with an empty value unconditionally.
+
+**Rendering:** `_lib/format.ts`'s `formatCellValue()` — a no-op for
+'plain'/undefined or a non-numeric resolved value (formatting applies to a
+number the formula engine actually resolved, not arbitrary text).
+`'date'` converts via `engine.numberToDate()` (HyperFormula's own date
+serial → calendar date), rendered as `YYYY-MM-DD`; no locale/format-pattern
+picker in this pass. `'currency'` is a fixed `$` prefix — no currency
+selector.
+
+**Deliberately deferred, not silently dropped:**
+
+- Bold/italic/text color and other cell styling.
+- Conditional formatting (rule-based highlighting). Real range-based
+  conditional formatting needs a multi-cell selection model this app
+  doesn't have (same gap noted for multi-cell copy/paste back in task 5) —
+  a single-cell "highlight this cell if its own value meets a condition"
+  version is buildable without one, using the same per-cell-metadata
+  mechanism this task introduces, but wasn't included in this pass either.
+- Named ranges, data validation — separate, not-yet-designed features.
+
 ## Architecture
 
 ```
@@ -430,6 +493,9 @@ at `catalog:`; devDeps `drizzle-kit`, `@sovereignfs/tsconfig`,
   general quote interface — this still needs its own design pass, not just
   a second implementation of that interface.
 - Real-time multiplayer editing, presence, comments.
-- Charts, pivot tables, conditional formatting, named ranges, data
-  validation, richer cell styling.
+- Charts, pivot tables, named ranges, data validation.
+- Richer cell styling (bold/italic/text color) and conditional formatting —
+  task 9 shipped only the number-format enum
+  (plain/number/currency/date), see "Cell number formatting" above for what
+  it deliberately left out and why.
 - XLSX import/export (either direction).

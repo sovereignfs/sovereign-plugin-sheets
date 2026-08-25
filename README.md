@@ -2,7 +2,7 @@
 
 A lightweight, self-hostable spreadsheet for [Sovereign](https://github.com/sovereignfs/sovereign), with a built-in currency conversion function.
 
-**Status:** v0.3.0 — MVP complete, workbook sharing + CSV import added (see [ROADMAP.md](ROADMAP.md))
+**Status:** v0.4.0 — MVP complete, workbook sharing + CSV import + cell number formatting added (see [ROADMAP.md](ROADMAP.md))
 **Plugin ID:** `fs.sovereign.sheets`
 **Route:** `/sheets`
 
