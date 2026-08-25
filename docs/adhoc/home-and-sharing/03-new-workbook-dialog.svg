@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" font-family="-apple-system, 'Segoe UI', sans-serif">
+  <rect width="640" height="360" fill="#e4e4e7" opacity="0.6"/>
+  <rect x="120" y="60" width="400" height="240" rx="12" fill="#ffffff" stroke="#d4d4d8"/>
+
+  <text x="148" y="102" font-size="18" font-weight="700" fill="#18181b">New workbook</text>
+  <text x="496" y="100" font-size="16" fill="#71717a">✕</text>
+
+  <text x="148" y="140" font-size="13" font-weight="600" fill="#18181b">Name</text>
+  <rect x="148" y="150" width="344" height="38" rx="8" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="162" y="174" font-size="14" fill="#a1a1aa">Untitled workbook</text>
+
+  <rect x="316" y="220" width="80" height="34" rx="8" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="336" y="242" font-size="13" fill="#18181b">Cancel</text>
+  <rect x="404" y="220" width="140" height="34" rx="8" fill="#18181b"/>
+  <text x="424" y="242" font-size="13" fill="#ffffff">Create workbook</text>
+
+  <text x="148" y="290" font-size="11" fill="#a1a1aa">Empty name submits as "Untitled workbook" (matches existing createWorkbookAction default).</text>
+  <text x="148" y="308" font-size="11" fill="#a1a1aa">Pending: button label flips to "Creating…", inputs disable. On success, navigates straight to /sheets/w/&lt;id&gt;.</text>
+</svg>

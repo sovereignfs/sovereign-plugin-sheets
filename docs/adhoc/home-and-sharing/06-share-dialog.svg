@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="640" viewBox="0 0 680 640" font-family="-apple-system, 'Segoe UI', sans-serif">
+  <rect width="680" height="640" fill="#e4e4e7" opacity="0.6"/>
+  <rect x="140" y="40" width="400" height="560" rx="12" fill="#ffffff" stroke="#d4d4d8"/>
+
+  <text x="168" y="82" font-size="18" font-weight="700" fill="#18181b">Share</text>
+  <text x="516" y="80" font-size="16" fill="#71717a">✕</text>
+  <text x="168" y="106" font-size="12" fill="#71717a">"Q3 budget"</text>
+
+  <!-- Member list -->
+  <g>
+    <text x="168" y="146" font-size="14" font-weight="600" fill="#18181b">Priya Nair</text>
+    <text x="168" y="164" font-size="12" fill="#71717a">priya@example.com</text>
+    <rect x="368" y="132" width="52" height="20" rx="10" fill="#f4f4f5" stroke="#e4e4e7"/>
+    <text x="378" y="146" font-size="10" fill="#52525b">Owner</text>
+    <text x="440" y="146" font-size="12" fill="#a1a1aa">(you)</text>
+  </g>
+  <line x1="168" y1="178" x2="512" y2="178" stroke="#f4f4f5"/>
+  <g>
+    <text x="168" y="204" font-size="14" font-weight="600" fill="#18181b">Sam Okafor</text>
+    <text x="168" y="222" font-size="12" fill="#71717a">sam@example.com</text>
+    <rect x="368" y="190" width="50" height="20" rx="10" fill="#f4f4f5" stroke="#e4e4e7"/>
+    <text x="378" y="204" font-size="10" fill="#52525b">Editor</text>
+    <rect x="440" y="190" width="72" height="26" rx="7" fill="#ffffff" stroke="#d4d4d8"/>
+    <text x="452" y="207" font-size="11" fill="#18181b">Remove</text>
+  </g>
+  <line x1="168" y1="236" x2="512" y2="236" stroke="#f4f4f5"/>
+  <g>
+    <text x="168" y="262" font-size="14" font-weight="600" fill="#18181b">Lena Brandt</text>
+    <text x="168" y="280" font-size="12" fill="#71717a">lena@example.com</text>
+    <rect x="368" y="248" width="50" height="20" rx="10" fill="#f4f4f5" stroke="#e4e4e7"/>
+    <text x="378" y="262" font-size="10" fill="#52525b">Viewer</text>
+    <rect x="440" y="248" width="72" height="26" rx="7" fill="#ffffff" stroke="#d4d4d8"/>
+    <text x="452" y="265" font-size="11" fill="#18181b">Remove</text>
+  </g>
+
+  <line x1="168" y1="304" x2="512" y2="304" stroke="#e4e4e7"/>
+
+  <!-- Invite form -->
+  <text x="168" y="336" font-size="13" font-weight="600" fill="#18181b">Person</text>
+  <rect x="168" y="346" width="344" height="38" rx="8" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="182" y="370" font-size="13" fill="#a1a1aa">Search by name or email</text>
+  <rect x="168" y="386" width="344" height="70" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="182" y="410" font-size="13" fill="#18181b">Marta Kowalski (marta@example.com)</text>
+  <text x="182" y="436" font-size="13" fill="#18181b">Marcus Webb (marcus@example.com)</text>
+
+  <text x="168" y="480" font-size="13" font-weight="600" fill="#18181b">Role</text>
+  <rect x="168" y="490" width="180" height="36" rx="8" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="182" y="513" font-size="13" fill="#18181b">Viewer</text>
+  <text x="332" y="513" font-size="11" fill="#71717a">▾</text>
+
+  <rect x="168" y="546" width="128" height="34" rx="8" fill="#18181b"/>
+  <text x="188" y="568" font-size="13" fill="#ffffff">Add person</text>
+
+  <text x="168" y="608" font-size="11" fill="#a1a1aa">Owner-only surface (isOwner gate). Last remaining Owner cannot be demoted or removed — same rule as Docs' folder-sharing.ts.</text>
+</svg>

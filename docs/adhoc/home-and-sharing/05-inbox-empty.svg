@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" font-family="-apple-system, 'Segoe UI', sans-serif">
+  <rect width="1200" height="600" fill="#fafafa"/>
+
+  <rect x="0" y="0" width="280" height="600" fill="#f4f4f5"/>
+  <line x1="280" y1="0" x2="280" y2="600" stroke="#e4e4e7"/>
+  <text x="52" y="39" font-size="14" fill="#52525b">Workbooks</text>
+  <rect x="16" y="56" width="248" height="36" rx="8" fill="#e4e4e7"/>
+  <text x="52" y="79" font-size="14" font-weight="600" fill="#18181b">Inbox</text>
+  <line x1="16" y1="104" x2="264" y2="104" stroke="#e4e4e7"/>
+  <text x="16" y="128" font-size="11" font-weight="600" letter-spacing="0.04em" fill="#71717a">RECENT</text>
+  <text x="16" y="150" font-size="12" fill="#a1a1aa">You haven't opened any</text>
+  <text x="16" y="168" font-size="12" fill="#a1a1aa">workbooks yet.</text>
+
+  <text x="312" y="56" font-size="24" font-weight="700" fill="#18181b">Inbox</text>
+
+  <g>
+    <circle cx="740" cy="290" r="36" fill="#f4f4f5"/>
+    <rect x="722" y="276" width="36" height="28" rx="4" fill="none" stroke="#a1a1aa" stroke-width="2"/>
+    <line x1="722" y1="290" x2="758" y2="290" stroke="#a1a1aa" stroke-width="1.5"/>
+    <line x1="740" y1="276" x2="740" y2="304" stroke="#a1a1aa" stroke-width="1.5"/>
+    <text x="740" y="364" font-size="17" font-weight="600" fill="#18181b" text-anchor="middle">Nothing here yet</text>
+    <text x="740" y="388" font-size="14" fill="#71717a" text-anchor="middle">Workbooks shared with you will show up here.</text>
+  </g>
+
+  <text x="312" y="500" font-size="12" fill="#a1a1aa">EmptyState, icon="inbox" — identical shape to Docs'/Kanban's own Inbox empty state.</text>
+</svg>

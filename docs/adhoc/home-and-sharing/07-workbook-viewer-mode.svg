@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" font-family="-apple-system, 'Segoe UI', sans-serif">
+  <rect width="1200" height="620" fill="#fafafa"/>
+
+  <!-- Header: no sidebar here — /sheets/w/[id] lives outside the (home) route group -->
+  <text x="32" y="34" font-size="14" fill="#52525b">‹ Back to workbooks</text>
+  <text x="32" y="66" font-size="22" font-weight="700" fill="#18181b">Team OKRs</text>
+  <rect x="176" y="48" width="70" height="20" rx="10" fill="#f4f4f5" stroke="#e4e4e7"/>
+  <text x="188" y="62" font-size="10" fill="#52525b">View only</text>
+
+  <!-- Header actions: no Undo/Redo, no Delete workbook, no Share (owner-only) — this row is empty for a viewer -->
+
+  <line x1="0" y1="90" x2="1200" y2="90" stroke="#e4e4e7"/>
+
+  <!-- Sheet tabs -->
+  <rect x="32" y="106" width="90" height="30" rx="6" fill="#e4e4e7"/>
+  <text x="50" y="126" font-size="12" font-weight="600" fill="#18181b">Q1</text>
+  <text x="150" y="126" font-size="12" fill="#71717a">Q2</text>
+  <text x="220" y="126" font-size="12" fill="#71717a">Notes</text>
+  <!-- no "+" add-sheet control in viewer mode -->
+
+  <!-- Formula bar -->
+  <rect x="32" y="150" width="1136" height="34" rx="6" fill="#f4f4f5" stroke="#e4e4e7"/>
+  <text x="48" y="171" font-size="12" fill="#71717a">B3</text>
+  <text x="88" y="171" font-size="12" fill="#a1a1aa">=SUM(B2:B12)</text>
+
+  <!-- Toolbar: Export CSV only -->
+  <rect x="32" y="196" width="96" height="28" rx="6" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="44" y="214" font-size="11" fill="#18181b">Export CSV</text>
+
+  <!-- Grid, cells rendered muted/disabled -->
+  <g>
+    <rect x="32" y="236" width="1136" height="30" fill="#f4f4f5"/>
+    <text x="60" y="255" font-size="11" fill="#71717a" text-anchor="middle">A</text>
+    <text x="180" y="255" font-size="11" fill="#71717a" text-anchor="middle">B</text>
+    <text x="300" y="255" font-size="11" fill="#71717a" text-anchor="middle">C</text>
+    <text x="420" y="255" font-size="11" fill="#71717a" text-anchor="middle">D</text>
+  </g>
+  <g stroke="#e4e4e7">
+    <line x1="32" y1="266" x2="1168" y2="266"/>
+    <line x1="32" y1="306" x2="1168" y2="306"/>
+    <line x1="32" y1="346" x2="1168" y2="346"/>
+    <line x1="32" y1="386" x2="1168" y2="386"/>
+    <line x1="100" y1="236" x2="100" y2="386"/>
+    <line x1="220" y1="236" x2="220" y2="386"/>
+    <line x1="340" y1="236" x2="340" y2="386"/>
+    <line x1="460" y1="236" x2="460" y2="386"/>
+  </g>
+  <text x="150" y="290" font-size="12" fill="#3f3f46">Revenue</text>
+  <text x="270" y="290" font-size="12" fill="#3f3f46">42,000</text>
+  <text x="150" y="330" font-size="12" fill="#3f3f46">Costs</text>
+  <text x="270" y="330" font-size="12" fill="#3f3f46">18,500</text>
+
+  <text x="32" y="440" font-size="12" fill="#a1a1aa">Viewer role: grid cells read-only (no focus/edit), formula bar read-only, no fill-down, no Undo/Redo, no sheet add/rename/delete/reorder.</text>
+  <text x="32" y="460" font-size="12" fill="#a1a1aa">"View only" badge next to the title is new vs. the Docs precedent (which degrades silently) — chosen per the skill's "status labels explain themselves" rule.</text>
+  <text x="32" y="480" font-size="12" fill="#a1a1aa">No Share button — owner-only (isOwner gate), same as FolderShareButton/DocumentPage's Share entry point.</text>
+  <text x="32" y="500" font-size="12" fill="#a1a1aa">Export CSV stays available to every role — it's a read operation, not a mutation.</text>
+</svg>
