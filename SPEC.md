@@ -237,29 +237,34 @@ actions), `EmptyState` (no-workbooks state).
   "schemaVersion": 1,
   "id": "fs.sovereign.sheets",
   "name": "Sheets",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "A lightweight spreadsheet with formulas and a built-in currency conversion function.",
-  "development": true,
   "type": "sovereign",
   "runtime": "native",
   "routePrefix": "/sheets",
   "shell": "default",
   "icon": "icon.svg",
-  "database": { "isolation": "isolated", "dialect": "sqlite" },
-  "permissions": ["auth:session", "db:readWrite", "data:export", "activity:write"],
+  "permissions": ["auth:session", "db:readWrite"],
   "repository": "https://github.com/sovereignfs/sovereign-plugin-sheets",
   "compatibility": { "minPlatformVersion": "0.42.0" }
 }
 ```
 
-- `data:export` — CSV export.
-- `activity:write` — workbook-created/edited activity feed entries (matches
-  Ledger/Wallet convention).
-- No `data:import` (no CSV import in MVP), no `notifications:send`, no
-  invented permission for a settings gate — none needed since `FINANCE()`
-  requires no secret.
-- Database isolation: `isolated` + `sqlite` — own SQLite file, clean
-  uninstall via `sv plugin remove`, no slug-prefix boilerplate on table names.
+- `auth:session` + `db:readWrite` are the only permissions declared. No
+  `data:export` — CSV export is a client-side `Blob` download, not the
+  `portability.provideExport()` flow. No `activity:write` — no
+  `sdk.activity.log()` calls exist. No `data:import` (no CSV import in MVP),
+  no `notifications:send`, no invented permission for a settings gate — none
+  needed since `FINANCE()` requires no secret.
+- No `database` field in the manifest — the per-plugin `isolation`/`dialect`
+  overrides were both retired platform-wide; every sovereign/community plugin
+  is now unconditionally isolated, with dialect set instance-wide via
+  `DB_DIALECT`. Sheets still runs on its own isolated SQLite store in
+  practice — clean uninstall via `sv plugin remove`, no slug-prefix
+  boilerplate on table names — that's just no longer something the manifest
+  itself declares.
+- No `development` flag — the MVP is shipped (tasks 1–5 done), not a
+  work-in-progress plugin.
 
 `package.json`: `@sovereignfs/sovereign-sheets`, `type: module`, license
 `AGPL-3.0-or-later` (matches Wallet/Tally), deps `@sovereignfs/sdk`,
