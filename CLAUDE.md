@@ -13,9 +13,28 @@ equivalent), and workbook-level sharing (owner/editor/viewer). A
 **Status: MVP shipped** (tasks 1–5 in ROADMAP.md) — workbooks, sheets,
 HyperFormula-backed formulas, `FINANCE()`, and CSV export are all live at
 `/sheets`. **Workbook sharing, CSV import, cell number formatting, named
-ranges, and cell styling/data validation shipped post-MVP** (tasks 6, 8–11)
-— see SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/
-"Named ranges"/"Cell styling and data validation" sections.
+ranges, cell styling/data validation, full-workbook JSON export/import,
+manual sheet growth, the workbook editor header redesign, a follow-up
+layout consolidation, an export/import menu consolidation, a
+status-badge placement tweak, resizable columns, a formula-bar/
+column-width bug-fix pass, cell font/background color, a cell-color
+visibility fix, multi-cell selection (range formatting, copy/cut/
+paste, bulk clear), a click-to-select/double-click-to-edit interaction
+model, cell font size, a toolbar icon polish pass, a font-color
+default swatch fix, color-picker auto-close-on-selection, Home page
+polish (shared-heading spacing + a ghost "add" tile), and a ghost-tile
+position + sizing fix shipped post-MVP** (tasks 6, 8–11, 13–29) —
+see SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/"Named
+ranges"/"Cell styling and data validation"/"Full-workbook JSON
+export/import"/"Sheet size: default and manual growth"/"Workbook editor
+header redesign"/"Layout consolidation and bottom-docked sheet tabs"/
+"Export/Import menu consolidation"/"Status badge placement"/"Resizable
+columns"/"Formula bar and column-width fixes"/"Cell font and background
+color"/"Cell color visibility fixes"/"Multi-cell selection"/"Click to
+select, double-click to edit"/"Cell font size"/"Toolbar icon polish:
+Bold/Italic/Fill color"/"Font color default swatch fix"/"Color picker
+auto-close on selection"/"Home page polish: shared-heading spacing +
+ghost \"add\" tile"/"Ghost tile position + sizing fix" sections.
 
 Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
@@ -39,25 +58,45 @@ implementation; SPEC.md's "Post-MVP" section is where deferred features are
 tracked, not silently reintroduced into an MVP task.
 
 **Workbook sharing (task 6), CSV import (task 8), cell number formatting
-(task 9), named ranges (task 10), and cell styling + data validation
-(task 11) are the deliberate exceptions** — all shipped post-MVP as
-scoped-in additions, not scope creep: SPEC.md's "Workbook sharing"/"CSV
-import"/"Cell number formatting"/"Named ranges"/"Cell styling and data
-validation" sections are the design records. Sharing is still
-*workbook-level* only (no per-sheet sharing, no real-time
-multiplayer/presence/comments — those stay out per the bullet above); CSV
-import is still *single-sheet, full-replace* only (no full-workbook import,
-no XLSX, no merge-with-existing-data mode); cell formatting is still *the
-number-format enum plus bold/italic* (no text color, no conditional
-formatting — task 9 shipped the format enum, task 11 added bold/italic on
-top of it, still a thinner slice of "richer cell formatting / conditional
-formatting" than the full phrase implies); named ranges is *just names →
+(task 9), named ranges (task 10), cell styling + data validation (task 11),
+full-workbook JSON export/import (task 13), cell font/background color
+(task 21), multi-cell selection (task 23), and the click-to-select/
+double-click-to-edit model + cell font size (task 24) are the deliberate
+exceptions** — all shipped post-MVP as scoped-in additions, not scope creep:
+SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/"Named
+ranges"/"Cell styling and data validation"/"Full-workbook JSON
+export/import"/"Cell font and background color"/"Multi-cell selection"/
+"Click to select, double-click to edit"/"Cell font size" sections are the
+design records. Sharing is still *workbook-level*
+only (no per-sheet sharing, no real-time multiplayer/presence/comments —
+those stay out per the bullet above); CSV import is still *single-sheet,
+full-replace* only (no full-workbook import, no XLSX, no
+merge-with-existing-data mode); cell formatting is still *the number-format
+enum, bold/italic, font/background color, and font size* (no conditional
+formatting — task 9 shipped the format enum, task 11 added bold/italic,
+task 21 added color, task 24 added font size, still a thinner slice of
+"richer cell formatting / conditional formatting" than the full phrase
+implies); named ranges is *just names →
 formula/reference*; data validation (task 11) is *per-cell soft validation
 only* — a number-range or list rule that renders a visual indicator, never
 blocks a commit, and has no range-based/multi-cell or custom-formula rule
-support. Don't conflate "sharing/import/formatting/named-ranges/validation
-shipped" with "collaboration/full-fidelity import/full styling/hard
-validation shipped."
+support (task 23's selection model didn't change this — validation stays
+single-cell, a deliberate scope line, not an oversight); full-workbook
+export/import (task 13) is a *native JSON backup/restore format only* —
+lossless within Sheets (formulas, styling, validation, named ranges all
+round-trip), but not an XLSX/Excel-interoperable file, and import only ever
+creates a **new** workbook, never an in-place merge/overwrite; multi-cell
+selection (task 23) is copy/cut/paste, bulk formatting, and bulk clear
+*within this app only* — no OS clipboard integration (no paste from/to
+Excel or a text file), and no range-based conditional formatting (still
+tracked separately, see "Post-MVP" below); the click-to-select/
+double-click-to-edit model (task 24) matches Google Sheets/Docs' basic
+click semantics but doesn't add anything beyond that — no cell-range
+autofill/drag-to-fill handle, no in-cell rich text. Don't conflate "sharing/
+import/formatting/named-ranges/validation/full-workbook-export/selection/
+edit-model shipped" with "collaboration/full-fidelity CSV import/full
+styling/hard validation/XLSX interoperability/OS clipboard interop
+shipped."
 
 ## `FINANCE()` is currency conversion only
 
@@ -130,4 +169,200 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.6.0** (task 11 — bold/italic cell styling and per-cell soft data validation, generalizing task 9's per-cell-metadata mechanism — see ROADMAP.md)
+Current version: **0.17.1** — fix: task 29, ghost tile position + sizing
+fix, direct follow-up to task 28 reported against a fuller account that
+exposed what task 28's own sparse 2-tile test grid hadn't.
+
+**Position**: moved from first to last in the "My workbooks" grid — a
+plain JSX reorder in `HomeWorkbooksList.tsx` (the `<Menu>` moved after
+`myWorkbooks.map(...)`, same `<CardTileGrid>`), no CSS change.
+
+**Sizing — a real bug task 28's own verification pass had wrongly signed
+off on** ("ghost tile renders at the correct size matching sibling
+workbook tiles" — false; a quick glance at only 2 sibling tiles hadn't
+caught it). The tile rendered as a narrow ~38px sliver at full height
+(106px) inside its 160px-wide grid cell. Root-caused by measuring actual
+layout (`getBoundingClientRect()`) rather than guessing: `NewCardTile`'s
+`variant="icon"` CSS (`.newTileIcon`, `packages/ui`'s
+`CardTile.module.css`) used `width: auto; height: auto`, relying on the
+CSS Grid parent's item-stretch to reach the tile's full footprint — which
+only works for a *direct* grid child. Task 28 wrapped the tile as a
+`Menu`'s trigger, which inserts `Popover`'s own `display: inline-flex`
+container between the grid and the button; that flex box's cross-axis
+stretch correctly sized the button's height (`inline-flex`'s default
+`align-items: stretch`), but flex never stretches a child along its main
+axis without an explicit width rule, so width silently fell back to
+shrink-to-fit (~38px) — even though the outer `Popover` container itself
+measured the correct 160px, nothing propagated that down one level
+further to the actual visible button.
+
+Fixed at the design-system level, not a Sheets-local workaround — this is
+a `NewCardTile` bug any future `Menu`/`Popover`-wrapped-in-grid consumer
+would hit identically. Switched `.newTileIcon` to explicit
+`width: 100%; height: 100%` — percentages resolve against whichever
+immediate parent box is already correctly sized to the grid cell
+(`Popover`'s stretched container, or the grid track directly with no
+wrapper at all), so this works regardless of how many intermediate boxes
+sit between the tile and its grid. `packages/ui` bumped `0.71.0` →
+`0.71.1` — patch, a bug fix not a new capability, unlike task 28's minor.
+
+Verified live via direct measurement before/after, not a screenshot
+glance: ghost tile now measures exactly 160×106px, matching every sibling
+`WorkbookTile` pixel-for-pixel; the menu still opens fully on-screen from
+its new trailing position (panel's own bounding rect checked against
+viewport width). **A live-testing false alarm along the way**: the first
+re-measurement attempt showed `window.innerWidth: 0` and `Menu` rendering
+via its mobile `Drawer` fallback instead of desktop `Popover` — traced to
+this session's own browser tooling viewport being left at a stale 0×0
+size by an unrelated earlier `resize_window` call (task 26's dark-mode
+check), not a real bug; resolved by explicitly resetting the viewport
+before re-testing.
+
+(Previous version: 0.17.0 — task 28, Home page polish (shared-
+heading spacing + a ghost "add" tile), two reports addressed together.
+
+**Spacing**: "Shared with me" sat flush against its own tile grid — only
+"My workbooks" had visible breathing room, because only it was wrapped in
+a `.headingRow` div (there to also hold its old heading-row icon buttons,
+see below) carrying the section's `margin-bottom`; "Shared with me" was a
+bare `<h2>` with none. Fixed by moving `margin-bottom` onto `.heading`
+itself and dropping `.headingRow` entirely — both sections are now plain
+`<h2 className={styles.heading}>` elements getting identical spacing from
+one rule, nothing special-cased.
+
+**Ghost "add" tile**: a dashed `NewCardTile` (`@sovereignfs/ui`,
+`variant="icon"`) is now the first item in the "My workbooks" grid,
+opening a `Menu` — the same component `WorkbookView.tsx`'s header already
+uses for Export/Import — offering "New workbook"/"Import workbook".
+Replaces two separate heading-row icon buttons that did the same two
+things, matching this plugin's own established one-trigger-many-options
+consolidation pattern. No new `packages/ui` component needed —
+`NewCardTile` already existed for exactly this "grid's own add-new
+affordance" role, just unused here until now.
+
+`NewWorkbookDialog` gained a `NewWorkbookDialogHandle` ref
+(`{ open: () => void }`) so the menu can open it with no visible trigger
+of its own — the same React-19-ref-as-prop pattern `ImportWorkbookHandle`
+(task 17) already established for the identical problem.
+`HomeWorkbooksList.tsx` renders one trigger-less instance of each dialog
+alongside the grid (`renderTrigger={() => null}` for `NewWorkbookDialog`,
+no `renderTrigger` at all for `ImportWorkbookButton`), and the menu's two
+items call `.open()` / `.triggerImport()` on their refs.
+
+**A real bug found live, not anticipated during implementation**: the
+`Menu`'s panel defaulted to `align="right"` (`Popover`'s own default,
+extending leftward from the trigger's right edge) — fine for the header's
+Export/Import menus with room to their left, but the ghost tile sits at
+the grid's left edge right after the sidebar, so the panel overflowed
+off-screen, text visibly cut off mid-word in a screenshot before the fix.
+Fixed with `align="left"`. Confirmed `Menu` was safe to render directly as
+a `CardTileGrid` child before this was even live-tested, by reading
+`Popover`'s and `Drawer`'s own source first: `Popover` (desktop) renders
+one wrapping `<div>` holding both trigger and an absolutely-positioned
+panel — one grid item, panel escapes visually without disrupting grid
+sizing — and `Drawer` (mobile) is `position: fixed` and returns `null`
+entirely while closed, so out-of-flow either way; no CSS grid workaround
+needed for either responsive path. Verified live end-to-end: ghost tile
+sized correctly against sibling workbook tiles; menu opens fully on-screen
+after the align fix; "New workbook" opens the real dialog (Name field,
+Cancel/Create workbook buttons) and Escape closes it with nothing created;
+"Import workbook" closes the menu and fires the hidden file input's native
+picker.
+
+(Previous version: 0.16.3 — task 27, color picker auto-close on
+selection, reported directly right after task 26 shipped: picking a color
+from the Font/Fill color popover left it open, requiring a separate
+dismiss (outside click, Escape, or re-clicking the trigger) — the original
+design (task 21's changelog entry) called this deliberate, to avoid
+closing mid-drag while the native custom-color `<input type="color">`'s
+`onChange` fires repeatedly inside the browser's own color dialog, but in
+practice this read as broken rather than deliberate for the much more
+common case: a single, discrete curated-swatch click.
+
+Fixed at the design-system level, not as a Sheets-local workaround —
+`ColorPicker` is a shared, published `@sovereignfs/ui` component (also used
+by Kanban's board-color dialogs), so per this repo's DS-first placement
+rule the fix belongs there. Added a new optional
+`onSelectionComplete?: () => void` prop (`packages/ui`, now `0.71.0`),
+fired only from the curated-swatch and "no color" buttons' `onClick`
+handlers — deliberately **not** wired to the native custom-color input's
+`onChange`, preserving the exact risk the original no-auto-close decision
+protected against. `SheetGrid.tsx` passes
+`onSelectionComplete={() => setFontColorOpen(false)}` /
+`setFillColorOpen(false)` to close its own `Popover`s on pick. Purely
+additive — optional, no-op when omitted — so Kanban's own `ColorPicker`
+usage (embedded in a form `Dialog`, not a `Popover`; auto-close isn't a
+meaningful question there) needed zero changes, confirmed via
+`pnpm --filter sovereign-plugin-kanban typecheck`. Verified live: picking
+"Amber" fill / "Orange" font both applied correctly and closed their
+popovers in one click; the native custom-color picker's own behavior is
+intentionally left unchanged (still needs an explicit dismiss — there's no
+reliable, false-positive-free "user is actually done" signal from a bare
+`onChange` alone).
+
+(Previous version: 0.16.2 — task 26, font-color default swatch fix,
+a direct follow-up reported right after task 25 shipped. The Font color
+toolbar bar showed `transparent` for the unset/default state — the same
+treatment Fill color legitimately uses for "no fill" — but font color is
+never actually invisible; unset always resolves to a real, visible
+`--sv-color-text-primary` (black in light mode), so a transparent bar
+misleadingly implied no color was applied when the text was in fact
+rendering in a specific color the swatch simply wasn't showing. Fixed by
+defaulting the bar's inline `backgroundColor` to
+`var(--sv-color-text-primary)` instead of `'transparent'`
+(`SheetGrid.tsx`'s `colorTriggerBar`) — a live CSS variable reference, not
+a hardcoded `#000`, so it automatically tracks light/dark mode and any
+future instance theming the same way every other semantic-token consumer
+in this app does. Fill color's bar deliberately left unchanged (still
+`transparent` for unset) — that one correctly represents "nothing," unlike
+font color. Verified live: bar renders solid black by default matching the
+token's computed value exactly; an explicit color override (tested red)
+still applies correctly; resetting via "Default color" returns the inline
+style to the token reference, not a stale literal.
+
+(Previous version: 0.16.1 — task 25, toolbar icon polish for Bold/Italic/
+Fill color, reported directly against Google Sheets' own toolbar as the
+reference. Italic's styled-text glyph (`<em>I</em>`) read as an unlabeled
+slash at toolbar size — a `font-style: italic` capital "I" in the design
+system's sans-serif font is just a slanted stroke, with no serifs to
+disambiguate it; fixed by switching Bold and Italic together to dedicated
+Lucide icons (`bold`/`italic`, added to `scripts/icon-list.ts` and
+regenerated via `pnpm generate:icons`) — a real icon draws explicit serif
+bars as vector paths, sidestepping the font-rendering problem entirely
+rather than trying to tune font-style harder. Fill color gained a
+`paint-bucket` icon (also new) rendered above its existing color bar, in
+the same vertical layout as Font color's "A" + bar
+(`.fillTrigger`/`.fillTriggerBar` mirroring `.colorTrigger`/
+`.colorTriggerBar`) — previously a bare, iconless swatch with no visual
+hint of what the control did. All four buttons (Bold/Italic/Font color/
+Fill color) switched from the generic `Button` component to plain
+`<button>`s using the toolbar's own uniform 28px `.toolbarIconButton` class
+(already used for Undo/Redo) instead of `Button`'s text-button padding, for
+a tighter row matching Google Sheets' own icon-button spacing; `Popover`'s
+`trigger` prop accepts any element with its own wired `onClick`, so no
+`Popover` changes were needed. Bold/Italic's pressed state moved from
+`Button`'s `variant="secondary"` to a new `.toolbarIconButtonActive` class
+(sunken fill + inset border, mirroring Docs' `RichTextEditor` toolbar's own
+`.toolbarButtonActive`).
+
+**A dev-environment false alarm consumed most of task 25's time, not a
+code bug.** After every static check passed, the live-verification browser
+kept showing the *old* toolbar (plain text, no icons) across a forced
+reload and a brand-new tab, with zero console errors — misleading at
+first, since it looked exactly like the kind of stale-bundle issue a hard
+reload normally fixes. Root-caused by diffing the served bundles (fetched
+with `cache: 'no-store'`, ruling out browser caching) against the edited
+source: the compiled CSS was missing the new class names entirely, while
+an unrelated `packages/ui` change (the new icon files, which Next watches
+directly since `packages/ui` is in `transpilePackages`) *did* compile
+fresh — isolating the gap to this plugin's own source specifically. Traced
+to this file's own documented dev-DX mechanism: "Plugin changes → HMR via
+re-copy... Next's dev watcher does not follow symlinks" — the `next dev`
+process in use was running standalone, without the sibling
+`generate --watch` process `scripts/dev.ts` normally starts to re-copy
+plugin source into the runtime's route group on every edit. Confirmed by
+diffing file mtimes (the copied
+`runtime/app/(platform)/(plugins)/sheets/_components/SheetGrid.module.css`
+was ~30 minutes stale) and fixed with a one-shot `pnpm generate` to force
+the re-copy — the same fix was reused for task 26's own verification, with
+no need to re-diagnose it a second time. See ROADMAP.md.)

@@ -50,6 +50,8 @@ export const sheets = sqliteTable(
     colCount: integer('col_count').notNull().default(26),
     /** Sparse A1-keyed map: `{ [a1Ref]: { v?: string|number, f?: string, fmt?: string } }`. */
     cellsJson: text('cells_json').notNull().default('{}'),
+    /** Sparse column-index-keyed map of custom widths in px: `{ "3": 140 }` — omitted columns render at `DEFAULT_COL_WIDTH_PX` (`_lib/config.ts`). */
+    colWidthsJson: text('col_widths_json').notNull().default('{}'),
     updatedAt: integer('updated_at').notNull(),
   },
   (t) => [index('sheets_workbook_idx').on(t.workbookId)],

@@ -1,45 +1,110 @@
 .view {
   display: flex;
   flex-direction: column;
-  gap: var(--sv-space-4);
+  gap: var(--sv-space-2);
   height: 100%;
   min-height: 0;
-  padding: var(--sv-space-6);
+  /* Without this, this flex item's default `min-width: auto` refuses to
+     shrink below its widest descendant's intrinsic width — the sheet grid
+     table (SheetGrid.module.css's `.grid`), which can run to hundreds of
+     columns. That forces every ancestor up through the platform shell's own
+     grid-item `<main>` wider than the viewport instead of the *table*
+     scrolling inside its own `.scroller` (`overflow-x: auto`) — the whole
+     page grows horizontally and everything past the fold (including this
+     header's own action buttons) renders off-screen with no way to reach
+     it. `min-width: 0` here (and on SheetGrid.module.css's `.wrapper`/
+     `.scroller`) breaks that chain so `.scroller` is what actually clips. */
+  min-width: 0;
+  /* Tightened from space-4/space-6/space-6 — the grid wants as much of the
+     viewport's width as it can get, and SheetGrid.module.css's `.scroller`
+     already draws its own border, so this container doesn't need a wide
+     gutter around it. Bottom padding is smaller still: SheetTabs.tsx now
+     renders last in this flex column (see the JSX comment at its call site
+     in WorkbookView.tsx) so it reads as docked flush against the browser's
+     own bottom edge, Google-Sheets-style, not floating in a gap below it. */
+  padding: var(--sv-space-2) var(--sv-space-3) var(--sv-space-1);
 }
 
-.header {
+/* Single-row workbook chrome: back arrow, title, action group — mirrors
+   Docs' DocumentPage.module.css `.metaBar` 1:1. */
+.metaBar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--sv-space-4);
+  align-items: center;
+  gap: var(--sv-space-1);
+  flex-wrap: wrap;
 }
 
-.titleRow {
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--sv-radius-sm);
+  color: var(--sv-color-text-muted);
+  text-decoration: none;
+}
+
+.backLink:hover {
+  background: var(--sv-color-surface-sunken);
+  color: var(--sv-color-text-primary);
+}
+
+.titleBlock {
   display: flex;
   align-items: center;
   gap: var(--sv-space-2);
+  flex: 1 1 auto;
+  /* A floor so the title never gets squeezed to nothing by a wide action
+     group before that group itself starts wrapping (`.metaRight` below). */
+  min-width: 160px;
+  /* Lets the title's own `overflow: hidden` truncation inside actually have
+     a narrower-than-content box to truncate against, instead of this flex
+     item stretching to fit the title's full unwrapped text. */
+  overflow: hidden;
 }
 
 .title {
-  font-size: var(--sv-font-size-2xl);
-  margin: var(--sv-space-1) 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--sv-font-size-xl);
+  margin: 0;
 }
 
-.headerActions {
-  align-items: center;
+/* Action group — same `flex: none` + `max-width: 100%` pairing Docs'
+   `.metaRight` uses. `flex-wrap: wrap` alone does nothing here: `flex: none`
+   means this never shrinks below its own buttons' natural combined width on
+   its own, so without an explicit `max-width` it would render at full width
+   regardless of how little room `.metaBar` actually has left after the
+   title — invisibly overflowing past the viewport edge with no scrollbar
+   and no wrap, exactly the bug this whole redesign was to fix. `max-width:
+   100%` is what actually makes the wrap trigger. */
+.metaRight {
   display: flex;
+  align-items: center;
+  flex: none;
+  max-width: 100%;
+  flex-wrap: wrap;
   gap: var(--sv-space-2);
 }
 
-.deleteWorkbook {
-  background: none;
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   border: none;
+  border-radius: var(--sv-radius-sm);
+  background: transparent;
   color: var(--sv-color-text-muted);
   cursor: pointer;
-  font-size: var(--sv-font-size-sm);
-  padding: var(--sv-space-2) 0;
 }
 
-.deleteWorkbook:hover {
+.iconButton:hover {
+  background: var(--sv-color-surface-sunken);
   color: var(--sv-color-text-primary);
 }
+

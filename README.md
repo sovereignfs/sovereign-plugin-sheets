@@ -2,7 +2,7 @@
 
 A lightweight, self-hostable spreadsheet for [Sovereign](https://github.com/sovereignfs/sovereign), with a built-in currency conversion function.
 
-**Status:** v0.6.0 — MVP complete, workbook sharing + CSV import + cell number formatting + named ranges + cell styling/data validation added (see [ROADMAP.md](ROADMAP.md))
+**Status:** v0.17.1 — MVP complete, workbook sharing + CSV import + cell number formatting + named ranges + cell styling/data validation + full-workbook JSON export/import + manual sheet growth + workbook editor header redesign + layout consolidation/bottom-docked sheet tabs + export/import menu consolidation + status badge placement + resizable columns + cell font/background color + multi-cell selection (range formatting, copy/cut/paste, bulk clear) + click-to-select/double-click-to-edit + cell font size + a ghost "add" tile on the Home page added, formula bar/column-width fixes, cell color visibility fixes, toolbar icon polish, font color default swatch fix, color picker auto-close on selection, Home page spacing fix, ghost tile position/sizing fix (see [ROADMAP.md](ROADMAP.md))
 **Plugin ID:** `fs.sovereign.sheets`
 **Route:** `/sheets`
 
@@ -16,9 +16,23 @@ standard formulas and cell references, and one custom function,
 `FINANCE(base, quote)`, Sheets' answer to `GOOGLEFINANCE()` for pulling a
 live currency exchange rate into a cell. Workbooks can be shared with other
 users on the same instance (owner/editor/viewer roles) — see SPEC.md's
-"Workbook sharing" section. Cells support bold/italic styling and a soft
-per-cell data-validation rule (number range or list of values) — see
-SPEC.md's "Cell styling and data validation" section.
+"Workbook sharing" section. Cells support bold/italic styling, font and
+background color, and a soft per-cell data-validation rule (number range or
+list of values) — see SPEC.md's "Cell styling and data validation" and
+"Cell font and background color" sections. Alongside CSV, a
+workbook can be exported/imported as a lossless native JSON file — formulas,
+styling, validation, and named ranges all round-trip, unlike CSV's
+values-only single-sheet snapshot — see SPEC.md's "Full-workbook JSON
+export/import" section. New sheets start at 100 rows × 20 columns, and grow
+further any time via "Add rows"/"Add columns" in the sheet toolbar. Cells
+can be multi-selected (click+drag, shift-click, or Shift+Arrow) to apply
+formatting, copy/cut/paste (with formula references translating relatively,
+same as Excel/Sheets), or clear a whole range at once — see SPEC.md's
+"Multi-cell selection" section. A single click selects a cell; a
+double-click (or F2) enters edit mode, matching Google Sheets/Docs — see
+SPEC.md's "Click to select, double-click to edit" section. Cells also
+support a per-cell font size, alongside bold/italic/color — see SPEC.md's
+"Cell font size" section.
 
 See [SPEC.md](SPEC.md) for the full functional requirements and data model,
 and [ROADMAP.md](ROADMAP.md) for the proposed build order.

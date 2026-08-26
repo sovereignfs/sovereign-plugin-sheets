@@ -1,0 +1,10 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  /* Same nested-flex min-width blowout as WorkbookView.module.css's `.view` —
+     this is the outermost link in the chain this plugin controls, sitting
+     directly inside the platform shell's own `<main>`. */
+  min-width: 0;
+}

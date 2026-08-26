@@ -1,10 +1,25 @@
+/* Docked at the bottom of the viewport (Google-Sheets-style) — the last
+   child of WorkbookView.module.css's `.view` flex column, which is now a
+   genuinely viewport-bounded box (`app/s/[workbookId]/page.tsx`'s
+   `data-plugin-fullbleed` — see that file's comment) rather than growing to
+   fit content, so this strip lands at the bottom of the viewport for free
+   from normal flex flow with no `position: sticky` needed.
+   `SheetGrid.module.css`'s `.scroller` is the one element that actually
+   scrolls internally (a real `overflow-y: auto` with a bounded height now
+   that the ancestor chain resolves); this row and everything above it
+   (header, toolbar, formula bar, column-letter row) stay in place as a
+   result, without any of them needing sticky positioning either.
+   `flex-shrink: 0` still guards against `SheetGrid`'s own `flex: 1` growth
+   ever compressing this row. Border/padding moved from bottom to top edge
+   since this strip now sits below the grid rather than above it. */
 .tabs {
   display: flex;
   align-items: center;
   gap: var(--sv-space-1);
   overflow-x: auto;
-  border-bottom: 1px solid var(--sv-color-border);
-  padding-bottom: var(--sv-space-1);
+  flex-shrink: 0;
+  border-top: 1px solid var(--sv-color-border);
+  padding-top: var(--sv-space-1);
 }
 
 .tab {

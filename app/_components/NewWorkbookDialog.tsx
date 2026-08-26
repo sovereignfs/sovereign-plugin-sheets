@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useImperativeHandle, useState, type ReactNode, type Ref } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Button, Dialog, FormField, Input } from '@sovereignfs/ui';
 import { createWorkbookAction } from '../actions';
@@ -15,8 +15,15 @@ function SubmitButton() {
   );
 }
 
+/** Exposed via ref for callers that drive this imperatively instead of rendering `renderTrigger` — e.g. a `Menu` item's `onSelect` (`HomeWorkbooksList.tsx`'s "add" ghost tile). */
+export interface NewWorkbookDialogHandle {
+  open: () => void;
+}
+
 interface NewWorkbookDialogProps {
-  /** Custom trigger instead of the default "New workbook" button — e.g. a compact "+" icon button beside the "My workbooks" heading. */
+  /** React 19 ref-as-prop — no `forwardRef` needed. */
+  ref?: Ref<NewWorkbookDialogHandle>;
+  /** Custom trigger instead of the default "New workbook" button — e.g. a compact "+" icon button beside the "My workbooks" heading. Pass `() => null` for no visible trigger of its own, driven only via `ref.open()`. */
   renderTrigger?: (props: { onClick: () => void }) => ReactNode;
 }
 
@@ -27,8 +34,12 @@ interface NewWorkbookDialogProps {
  * `useActionState`/`ActionResult` machinery needed, just a `useFormStatus`
  * submit button for the pending label.
  */
-export function NewWorkbookDialog({ renderTrigger }: NewWorkbookDialogProps = {}) {
+export function NewWorkbookDialog({ ref, renderTrigger }: NewWorkbookDialogProps = {}) {
   const [open, setOpen] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    open: () => setOpen(true),
+  }));
 
   return (
     <>

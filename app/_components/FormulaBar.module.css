@@ -10,16 +10,30 @@
 .cellLabel {
   color: var(--sv-color-text-muted);
   flex-shrink: 0;
-  font-size: var(--sv-font-size-sm);
+  font-size: var(--sv-font-size-xs);
   font-weight: 600;
   min-width: 2.5rem;
 }
 
-.input {
+/*
+ * Compound selector (not just `.input`) is load-bearing: `CodeTextarea`'s own
+ * `.textarea` class sets `min-height: 180px` (sized for its usual multi-line
+ * Markdown/YAML/JSON use) at equal specificity to a bare `.input` class, so
+ * which one wins depends on CSS-module chunk load order — not guaranteed,
+ * and was observed flipping between dev sessions, rendering this as a huge
+ * ~180px box instead of a single formula-bar line. `.bar .input` raises
+ * specificity so this overrides deterministically regardless of source order.
+ * `font-size` is set here too, down from the inherited `--sv-font-size-sm`
+ * (14px, matching the grid's own default cell size) to `--sv-font-size-xs`
+ * (12px) — reported as too large for a single-line reference bar rather
+ * than the grid content it's describing.
+ */
+.bar .input {
   border: none;
   min-height: 0;
   padding: var(--sv-space-1);
   resize: none;
   white-space: nowrap;
   overflow-x: auto;
+  font-size: var(--sv-font-size-xs);
 }

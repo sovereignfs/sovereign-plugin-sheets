@@ -49,7 +49,7 @@ export function NamedRangesButton({ ranges, canEdit, onAdd, onRemove }: NamedRan
 
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         Named ranges
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} size="md" title="Named ranges">
