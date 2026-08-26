@@ -1636,6 +1636,97 @@ formula-bar split), `CodeTextarea` (formula bar), `FormField`, `StatusBadge`
 (save/sync state), `Toast`/`ConfirmDialog` (save feedback, destructive
 actions), `EmptyState` (no-workbooks state).
 
+## Critical: missing Postgres migrations (task 30)
+
+Found immediately after the tasks-12–29 build-out was merged and deployed
+to a real Postgres-backed instance: `migrations/postgres/` had never
+existed for this plugin at all. Every other isolated Postgres-capable
+plugin in this monorepo (`docs`, `kanban`, `tasks`, `shopper`,
+`plainwrite`) ships both `migrations/sqlite/` and `migrations/postgres/`,
+generated from a `db/schema.ts`/`db/schema.postgres.ts` pair — Sheets only
+ever had the SQLite half. Not a regression from tasks 12–29's own work;
+the gap is as old as task 6, which created the `workbook_members` table
+that first exposed it.
+
+**Why this had no visible symptom until a real deploy hit it**: the
+runtime's per-plugin migration runner resolves each plugin's migration
+folder via `pluginMigrationsFolder(pluginDir, dialect)`
+(`packages/db/src/plugin-client.ts`) and silently `continue`s past any
+plugin whose folder for the active dialect doesn't exist — no error, no
+log line (`runtime/src/plugin-migrations.ts`). On SQLite (this plugin's
+only dev/testing dialect throughout tasks 1–29) this was invisible, since
+`migrations/sqlite/` always existed and ran fine. The first time this
+plugin actually ran against `DB_DIALECT=postgres`, every query touching
+`workbook_members` — starting with the Home page's very first query,
+`listWorkbooksOverview()` — failed with Postgres error `42P01`:
+`relation "workbook_members" does not exist`, surfacing as a generic
+Next.js error boundary on every `/sheets` load, for every user, with no
+workaround.
+
+**Fix**: added the missing three-file pattern every sibling plugin already
+has —
+
+- `app/_db/schema.postgres.ts`: a `pgTable`-based structural mirror of
+  `app/_db/schema.ts`. Exists only to drive `drizzle-kit generate --dialect
+  postgresql`, which cannot read a `sqliteTable()`-based schema file
+  directly (`docs/plugin-database.md`); application code never imports it.
+- `drizzle.config.pg.ts` + a new `db:generate:pg` package.json script,
+  identical in shape to every sibling plugin's own.
+- The generated `migrations/postgres/0000_handy_puppet_master.sql`,
+  covering all four tables (`workbooks`, `sheets`, `workbook_members`,
+  `finance_rate_cache`) in one shot — a first-time install has no prior
+  Postgres migration history to reconcile, so a single initial migration
+  is correct and complete.
+
+**Timestamps use `bigint({ mode: 'number' })`, deliberately diverging from
+`docs/plugin-database.md`'s general "plain integer, never bigint"
+guidance for non-boolean/non-ID columns.** That general rule exists
+because a `sqliteTable()`-defined column serializes/deserializes assuming
+SQLite's `integer` affinity (effectively unbounded width) — but Postgres's
+own `integer` type is a real, fixed 32-bit column (max `2147483647`), and
+a Unix millisecond timestamp is a 13-digit number, already roughly 800x
+past that ceiling. `sovereign-plugin-kanban` shipped its own Postgres
+schema with plain `integer` timestamps first and hit this for real in
+production — every insert failing immediately, `value "..." is out of
+range for type integer` — and had to `ALTER COLUMN ... SET DATA TYPE
+bigint` on every timestamp column across a follow-up migration. Written
+correctly here from the start instead of repeating that same incident:
+every timestamp column (`workbooks.createdAt/updatedAt/deletedAt`,
+`workbookMembers.joinedAt/lastOpenedAt`,
+`financeRateCache.asOf/fetchedAt`) is `bigint`; non-timestamp integers
+(`sheets.position/rowCount/colCount` — small values, no realistic
+overflow risk) stay plain `integer`, matching Kanban's own precedent for
+its non-timestamp `done` column.
+
+**Foreign-key schema qualifiers manually stripped**: `drizzle-kit
+generate --dialect postgresql` always qualifies a generated `FOREIGN KEY`
+constraint's target table with the schema its `pgTable()` was declared in
+— `public` by default, since `schema.postgres.ts` never declares an
+explicit `pgSchema()`. At runtime a plugin's tables live in
+`plugin_<slug>`, reached only via the connection's `search_path`, never
+literally in `public` — a generated `REFERENCES "public"."workbooks"(...)`
+would fail with `relation "public.workbooks" does not exist` the moment
+this migration actually ran, taking its whole transaction (every
+`CREATE TABLE` in the same file, since Drizzle wraps a migration file in
+one transaction) down with it. Both generated `sheets`→`workbooks` and
+`workbook_members`→`workbooks` foreign keys were manually corrected to
+the unqualified `REFERENCES "workbooks"(...)`, per
+`docs/plugin-database.md`'s "Foreign keys in a Postgres schema" — the
+generator has no schema awareness and will re-add the qualifier on every
+future regeneration that touches a foreign key; re-check by hand each time.
+
+**Verification scope, honestly stated**: confirmed via
+`pnpm --filter @sovereignfs/sovereign-sheets typecheck` and a full manual
+review of the generated SQL against `app/_db/schema.ts` column-by-column,
+but **not** live-verified against a real Postgres instance from this
+development environment — there is no direct access to the affected
+production database or server from here. Real verification is the
+operator's own: redeploying (the automatic migration-on-startup path
+picks this up on the next container recreate once the image includes
+`migrations/postgres/`) or running `sv plugin migrate fs.sovereign.sheets`
+manually against a rebuilt image, then confirming `/sheets` loads and a
+workbook can be created/opened.
+
 ## Manifest & permissions
 
 ```json

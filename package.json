@@ -6,7 +6,8 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate --schema app/_db/schema.ts --out migrations/sqlite --dialect sqlite"
+    "db:generate": "drizzle-kit generate --schema app/_db/schema.ts --out migrations/sqlite --dialect sqlite",
+    "db:generate:pg": "drizzle-kit generate --schema app/_db/schema.postgres.ts --out migrations/postgres --dialect postgresql"
   },
   "dependencies": {
     "@sovereignfs/sdk": "workspace:*",
