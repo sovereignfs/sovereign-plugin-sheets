@@ -7,7 +7,7 @@ import styles from './layout.module.css';
 /**
  * Route-group layout for every view that keeps the persistent sidebar:
  * Workbooks (`/sheets`) and Inbox (`/sheets/inbox`). The workbook editor
- * (`/sheets/w/[id]`) lives outside this group — same split as Docs'
+ * (`/sheets/s/[id]`) lives outside this group — same split as Docs'
  * Document editor / Kanban's Board View.
  *
  * A shared ancestor layout isn't re-fetched by the Next.js App Router on

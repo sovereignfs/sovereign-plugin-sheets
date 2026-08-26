@@ -1,24 +1,49 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { CardTile, CardTileGrid, EmptyState, Icon, Input, PageHeader } from '@sovereignfs/ui';
+import { useRef, useState } from 'react';
+import {
+  Button,
+  CardTile,
+  CardTileGrid,
+  EmptyState,
+  Icon,
+  Input,
+  Menu,
+  NewCardTile,
+  PageHeader,
+  type MenuEntry,
+} from '@sovereignfs/ui';
 import type { WorkbookOverviewItem } from '../actions';
-import { NewWorkbookDialog } from './NewWorkbookDialog';
+import { ImportWorkbookButton, type ImportWorkbookHandle } from './ImportWorkbookButton';
+import { NewWorkbookDialog, type NewWorkbookDialogHandle } from './NewWorkbookDialog';
 import styles from './HomeWorkbooksList.module.css';
 
 /**
  * Home's main content — "My workbooks" / "Shared with me", split on
  * `workbook_members` role. Same shape as Docs' `HomeFoldersList`, adapted:
- * the "+" (New workbook) trigger sits next to this page's own "My
- * workbooks" heading rather than in the sidebar, since SheetsSidebar has no
- * "My X" group to anchor it to (see docs/adhoc/home-and-sharing.md).
+ * the "add" affordance is a ghost `NewCardTile` inside the "My workbooks"
+ * grid itself (rather than a heading-row icon button, or living in the
+ * sidebar — SheetsSidebar has no "My X" group to anchor it to), opening a
+ * `Menu` offering "New workbook" / "Import workbook" — the same
+ * one-trigger-many-options consolidation `WorkbookView.tsx`'s own
+ * Export/Import menus already use, replacing what were previously two
+ * separate heading-row icon buttons doing the same two things (see
+ * docs/adhoc/home-and-sharing.md).
  *
  * Search collapses back to a flat match list (no grouping) across both
  * sections — grouping exists for browsing, not filtering.
  */
 export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem[] }) {
   const [query, setQuery] = useState('');
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const newWorkbookRef = useRef<NewWorkbookDialogHandle>(null);
+  const importWorkbookRef = useRef<ImportWorkbookHandle>(null);
+
+  const addMenuItems: MenuEntry[] = [
+    { label: 'New workbook', icon: 'plus', onSelect: () => newWorkbookRef.current?.open() },
+    { label: 'Import workbook', icon: 'upload', onSelect: () => importWorkbookRef.current?.triggerImport() },
+  ];
 
   const normalizedQuery = query.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
@@ -55,7 +80,18 @@ export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem
         <EmptyState
           heading="No workbooks yet"
           description="Create your first workbook to get started."
-          action={<NewWorkbookDialog />}
+          action={
+            <div className={styles.emptyActions}>
+              <NewWorkbookDialog />
+              <ImportWorkbookButton
+                renderTrigger={({ onClick, pending }) => (
+                  <Button type="button" variant="secondary" onClick={onClick} disabled={pending}>
+                    {pending ? 'Importing…' : 'Import workbook'}
+                  </Button>
+                )}
+              />
+            </div>
+          }
         />
       ) : hasNoResults ? (
         <EmptyState heading="No matches" description={`Nothing found for "${query}".`} />
@@ -70,25 +106,30 @@ export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem
       ) : (
         <div className={styles.lists}>
           <div>
-            <div className={styles.headingRow}>
-              <h2 className={styles.heading}>My workbooks</h2>
-              <NewWorkbookDialog
-                renderTrigger={({ onClick }) => (
-                  <button type="button" className={styles.addButton} aria-label="New workbook" onClick={onClick}>
-                    <Icon name="plus" size="sm" aria-hidden={true} />
-                  </button>
-                )}
+            <h2 className={styles.heading}>My workbooks</h2>
+            <CardTileGrid dense minTileWidth={160}>
+              {myWorkbooks.map((workbook) => (
+                <WorkbookTile key={workbook.id} workbook={workbook} />
+              ))}
+              <Menu
+                aria-label="Add workbook"
+                open={addMenuOpen}
+                onClose={() => setAddMenuOpen(false)}
+                align="left"
+                trigger={
+                  <NewCardTile
+                    variant="icon"
+                    label="Add workbook"
+                    aria-haspopup="menu"
+                    aria-expanded={addMenuOpen}
+                    onClick={() => setAddMenuOpen((v) => !v)}
+                  />
+                }
+                items={addMenuItems}
               />
-            </div>
-            {myWorkbooks.length === 0 ? (
-              <p className={styles.groupEmpty}>You haven&apos;t created a workbook yet.</p>
-            ) : (
-              <CardTileGrid dense minTileWidth={160}>
-                {myWorkbooks.map((workbook) => (
-                  <WorkbookTile key={workbook.id} workbook={workbook} />
-                ))}
-              </CardTileGrid>
-            )}
+            </CardTileGrid>
+            <NewWorkbookDialog ref={newWorkbookRef} renderTrigger={() => null} />
+            <ImportWorkbookButton ref={importWorkbookRef} />
           </div>
 
           <div>
@@ -111,8 +152,8 @@ export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem
 
 function WorkbookTile({ workbook, shared = false }: { workbook: WorkbookOverviewItem; shared?: boolean }) {
   return (
-    <Link href={`/sheets/w/${workbook.id}`} className={styles.tileLink}>
-      <CardTile variant="icon" banner={<Icon name="table" size="lg" aria-hidden={true} />}>
+    <Link href={`/sheets/s/${workbook.id}`} className={styles.tileLink}>
+      <CardTile variant="icon" banner={<Icon name="sheet" size="lg" aria-hidden={true} />}>
         <span className={styles.tileLabel} title={workbook.name}>
           {workbook.name}
         </span>

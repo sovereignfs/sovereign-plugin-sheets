@@ -29,7 +29,7 @@ async function notifyMember(
         recipientUserId,
         title: 'Shared a workbook with you',
         body: `You were added to "${workbookName}" as ${role}.`,
-        url: `/sheets/w/${workbookId}`,
+        url: `/sheets/s/${workbookId}`,
       },
       await headers(),
     );
@@ -178,7 +178,7 @@ export async function inviteWorkbookMember(
     await notifyMember(invitedUserId, workbook.name, workbookId, roleInput);
   }
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
   return { ok: true, message: `Added ${invitedUser.name ?? invitedUser.email} as ${roleInput}.` };
 }
 
@@ -216,6 +216,6 @@ export async function removeWorkbookMember(
       ),
     );
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
   return { ok: true };
 }

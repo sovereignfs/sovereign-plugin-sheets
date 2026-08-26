@@ -8,13 +8,13 @@ import styles from './SheetsSidebar.module.css';
 
 /** Persistent secondary nav, same precedent as DocsSidebar/KanbanSidebar. */
 const NAV = [
-  { href: '/sheets', label: 'Workbooks', icon: 'table' as const },
+  { href: '/sheets', label: 'Workbooks', icon: 'sheet' as const },
   { href: '/sheets/inbox', label: 'Inbox', icon: 'inbox' as const },
 ];
 
 /**
  * Scoped to `app/(home)/layout.tsx` — Workbooks and Inbox keep this sidebar
- * mounted across navigation. `/sheets/w/[id]` (the workbook editor) lives
+ * mounted across navigation. `/sheets/s/[id]` (the workbook editor) lives
  * outside `(home)` and gets no sidebar, same split as Docs' Document editor
  * and Kanban's Board View.
  *
@@ -56,7 +56,7 @@ export function SheetsSidebar({ recent }: { recent: RecentWorkbookItem[] }) {
           </Typography>
         ) : (
           recent.map((workbook) => (
-            <Link key={workbook.id} href={`/sheets/w/${workbook.id}`} className={styles.link}>
+            <Link key={workbook.id} href={`/sheets/s/${workbook.id}`} className={styles.link}>
               {workbook.name}
             </Link>
           ))

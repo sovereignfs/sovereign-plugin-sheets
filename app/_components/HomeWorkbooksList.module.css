@@ -9,37 +9,31 @@
   max-width: 280px;
 }
 
+.emptyActions {
+  display: flex;
+  gap: var(--sv-space-2);
+}
+
 .lists {
   display: flex;
   flex-direction: column;
   gap: var(--sv-space-6);
 }
 
-.headingRow {
-  display: flex;
-  align-items: center;
-  gap: var(--sv-space-2);
-  margin-bottom: var(--sv-space-2);
-}
-
+/*
+ * `margin-bottom` lives on `.heading` itself, not a wrapping row — both
+ * "My workbooks" and "Shared with me" are bare `<h2>`s (the "My workbooks"
+ * add affordance moved into its own ghost `NewCardTile` inside the grid
+ * below, task 28), so a single rule gives both sections the same gap above
+ * their tile grid. Previously this spacing only existed on a `.headingRow`
+ * wrapper "My workbooks" had and "Shared with me" didn't, leaving the
+ * latter's heading flush against its grid with no breathing room.
+ */
 .heading {
-  margin: 0;
+  margin: 0 0 var(--sv-space-4);
   font-size: var(--sv-font-size-sm);
   font-weight: 600;
   color: var(--sv-color-text-muted);
-}
-
-.addButton {
-  all: unset;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--sv-radius-sm);
-  background: var(--sv-color-text-primary);
-  color: var(--sv-color-surface);
-  cursor: pointer;
 }
 
 .groupEmpty {

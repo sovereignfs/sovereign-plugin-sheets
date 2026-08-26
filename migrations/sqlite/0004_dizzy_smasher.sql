@@ -1,0 +1,1 @@
+ALTER TABLE `sheets` ADD `col_widths_json` text DEFAULT '{}' NOT NULL;

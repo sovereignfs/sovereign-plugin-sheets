@@ -1,18 +1,19 @@
 'use server';
 
-import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { sdk } from '@sovereignfs/sdk';
 import { financeRateCache, sheets, workbookMembers, workbooks } from './_db/schema';
 import { DEFAULT_COL_COUNT, DEFAULT_ROW_COUNT } from './_lib/config';
-import { type Db, getContext, now } from './_lib/context';
+import { type ActionResult, type Db, getContext, now } from './_lib/context';
 import { formString } from './_lib/formUtils';
 import { frankfurterProvider } from './_lib/frankfurter';
 import type { FxRateProvider } from './_lib/fx-rate-provider';
 import { pairKey } from './_lib/finance-function';
+import { newId } from './_lib/ids';
 import { canEditWorkbookRole, type WorkbookMemberRole } from './_lib/workbook-rules';
+import { parseWorkbookExportPayload } from './_lib/workbook-export';
 
 const RECENT_WORKBOOKS_LIMIT = 8;
 const FINANCE_RATE_TTL_SECONDS = 6 * 60 * 60;
@@ -133,8 +134,8 @@ export async function createWorkbookAction(formData: FormData): Promise<void> {
 
   const name = formString(formData, 'name') || 'Untitled workbook';
   const timestamp = now();
-  const workbookId = randomUUID();
-  const sheetId = randomUUID();
+  const workbookId = newId();
+  const sheetId = newId();
 
   await db.insert(workbooks).values({
     id: workbookId,
@@ -164,11 +165,81 @@ export async function createWorkbookAction(formData: FormData): Promise<void> {
     rowCount: DEFAULT_ROW_COUNT,
     colCount: DEFAULT_COL_COUNT,
     cellsJson: '{}',
+    colWidthsJson: '{}',
     updatedAt: timestamp,
   });
 
   revalidatePath('/sheets');
-  redirect(`/sheets/w/${workbookId}`);
+  redirect(`/sheets/s/${workbookId}`);
+}
+
+/**
+ * Creates a new workbook from a previously-exported `.json` file (see
+ * `_lib/workbook-export.ts`) — never an in-place overwrite of an existing
+ * workbook, unlike CSV import's destructive full-sheet replace. `formData`'s
+ * `payload` field is the already-parsed-and-sanitized JSON string produced
+ * by `ImportWorkbookButton`'s own client-side `parseWorkbookExportPayload`
+ * call; re-validated here regardless, since a server action is a public
+ * endpoint dispatched by action id, not gated by whichever UI happens to
+ * call it.
+ */
+export async function importWorkbookAction(
+  _prevState: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const { db, userId, tenantId } = await getContext();
+
+  const raw = formString(formData, 'payload');
+  if (!raw) return { ok: false, error: 'No file selected.' };
+
+  const parsed = parseWorkbookExportPayload(raw);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+
+  const { workbook } = parsed.payload;
+  const timestamp = now();
+  const workbookId = newId();
+  // Id generated inline per sheet (not looked up from a separate parallel
+  // array by index) so `sheet.id` below is always a plain `string`, never
+  // `string | undefined`.
+  const newSheets = workbook.sheets.map((sheet) => ({ ...sheet, id: newId() }));
+
+  await db.insert(workbooks).values({
+    id: workbookId,
+    tenantId,
+    ownerUserId: userId,
+    name: workbook.name || 'Untitled workbook',
+    activeSheetId: newSheets[0]?.id ?? null,
+    namedRangesJson: workbook.namedRangesJson,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+
+  await db.insert(workbookMembers).values({
+    workbookId,
+    userId,
+    tenantId,
+    role: 'owner',
+    invitedBy: null,
+    joinedAt: timestamp,
+  });
+
+  await db.insert(sheets).values(
+    newSheets.map((sheet) => ({
+      id: sheet.id,
+      tenantId,
+      workbookId,
+      name: sheet.name,
+      position: sheet.position,
+      rowCount: sheet.rowCount,
+      colCount: sheet.colCount,
+      cellsJson: sheet.cellsJson,
+      colWidthsJson: sheet.colWidthsJson,
+      updatedAt: timestamp,
+    })),
+  );
+
+  revalidatePath('/sheets');
+  redirect(`/sheets/s/${workbookId}`);
 }
 
 export interface WorkbookWithSheets {
@@ -181,6 +252,7 @@ export interface WorkbookWithSheets {
     rowCount: number;
     colCount: number;
     cellsJson: string;
+    colWidthsJson: string;
   }[];
 }
 
@@ -232,6 +304,7 @@ export async function getWorkbook(workbookId: string): Promise<WorkbookWithSheet
       rowCount: s.rowCount,
       colCount: s.colCount,
       cellsJson: s.cellsJson,
+      colWidthsJson: s.colWidthsJson,
     })),
   };
 }
@@ -282,7 +355,7 @@ export async function addSheetAction(
   }
 
   const timestamp = now();
-  const sheetId = randomUUID();
+  const sheetId = newId();
 
   await db.insert(sheets).values({
     id: sheetId,
@@ -293,10 +366,11 @@ export async function addSheetAction(
     rowCount: DEFAULT_ROW_COUNT,
     colCount: DEFAULT_COL_COUNT,
     cellsJson: '{}',
+    colWidthsJson: '{}',
     updatedAt: timestamp,
   });
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
   return { id: sheetId, name };
 }
 
@@ -316,7 +390,7 @@ export async function renameSheetAction(
     .set({ name: trimmed, updatedAt: now() })
     .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
 }
 
 /**
@@ -340,7 +414,30 @@ export async function resizeSheetAction(
     .set({ rowCount, colCount, updatedAt: now() })
     .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
+}
+
+/**
+ * Persists the whole column-widths map in one write, same pattern as
+ * `saveNamedRangesAction` below — the client (`SheetGrid.tsx`'s resize
+ * handle, via `WorkbookView.tsx`'s `columnWidthsMaps`) already holds the
+ * authoritative per-column map, so there's no per-column CRUD action here.
+ * Called once per resize gesture (on pointer-up), not per pixel dragged.
+ */
+export async function saveColumnWidthsAction(
+  sheetId: string,
+  workbookId: string,
+  colWidthsJson: string,
+): Promise<void> {
+  const { db, userId, tenantId } = await getContext();
+  if (!(await hasWorkbookAccess(db, tenantId, userId, workbookId, 'write'))) return;
+
+  await db
+    .update(sheets)
+    .set({ colWidthsJson, updatedAt: now() })
+    .where(and(eq(sheets.id, sheetId), eq(sheets.tenantId, tenantId), eq(sheets.workbookId, workbookId)));
+
+  revalidatePath(`/sheets/s/${workbookId}`);
 }
 
 /**
@@ -361,7 +458,7 @@ export async function saveNamedRangesAction(
     .set({ namedRangesJson, updatedAt: now() })
     .where(and(eq(workbooks.id, workbookId), eq(workbooks.tenantId, tenantId)));
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
 }
 
 export async function deleteSheetAction(sheetId: string, workbookId: string): Promise<void> {
@@ -396,7 +493,7 @@ export async function deleteSheetAction(sheetId: string, workbookId: string): Pr
     }
   }
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
 }
 
 export async function reorderSheetsAction(
@@ -421,7 +518,7 @@ export async function reorderSheetsAction(
     ),
   );
 
-  revalidatePath(`/sheets/w/${workbookId}`);
+  revalidatePath(`/sheets/s/${workbookId}`);
 }
 
 export async function deleteWorkbookAction(workbookId: string): Promise<void> {

@@ -10,21 +10,37 @@ export interface CellData {
 export type CellFormat = NonNullable<CellData['fmt']>;
 export const CELL_FORMATS: CellFormat[] = ['plain', 'number', 'currency', 'date'];
 
-/** Text styling — bold/italic only for now, no color (see SPEC.md's "Cell styling"). */
+/**
+ * Text styling. `color`/`bg` are 6-digit hex (e.g. `#d64545`) or absent —
+ * absent means "use the theme default" (`--sv-color-text-primary` for text,
+ * no fill for background), not a specific stored color, so a cell with no
+ * explicit color stays correct across light/dark mode and any future theme.
+ * See SPEC.md's "Cell font and background color". `fontSize` is a px value
+ * from `_lib/font-sizes.ts`'s curated list, or absent (inherits the grid's
+ * own default, `--sv-font-size-sm`) — see SPEC.md's "Cell font size".
+ */
 export interface CellStyle {
   bold?: boolean;
   italic?: boolean;
+  color?: string;
+  bg?: string;
+  fontSize?: number;
 }
 
 export function isEmptyStyle(style: CellStyle | undefined): boolean {
-  return !style || (!style.bold && !style.italic);
+  return (
+    !style || (!style.bold && !style.italic && !style.color && !style.bg && !style.fontSize)
+  );
 }
 
 /**
- * A per-cell rule (not range-based — no multi-cell selection model exists
- * in this grid; see SPEC.md's "Data validation"). 'range' applies to the
- * cell's *resolved* numeric value (so a formula result is checked, not just
- * a typed literal); 'list' applies to the resolved value as text.
+ * A per-cell rule. Applying a rule to a *range* at once (task 23 added a
+ * multi-cell selection model other bulk operations use) is a deliberate
+ * scope line, not a limitation of the grid itself — see SPEC.md's "Data
+ * validation" and CLAUDE.md's MVP-scope-discipline note on task 23.
+ * 'range' applies to the cell's *resolved* numeric value (so a formula
+ * result is checked, not just a typed literal); 'list' applies to the
+ * resolved value as text.
  */
 export type DataValidationRule =
   | { type: 'range'; min?: number; max?: number }

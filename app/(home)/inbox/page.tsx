@@ -42,8 +42,8 @@ export default async function InboxPage() {
 
 function WorkbookTile({ workbook }: { workbook: WorkbookOverviewItem }) {
   return (
-    <Link href={`/sheets/w/${workbook.id}`} className={styles.tileLink}>
-      <CardTile variant="icon" banner={<Icon name="table" size="lg" aria-hidden={true} />}>
+    <Link href={`/sheets/s/${workbook.id}`} className={styles.tileLink}>
+      <CardTile variant="icon" banner={<Icon name="sheet" size="lg" aria-hidden={true} />}>
         <span className={styles.tileLabel} title={workbook.name}>
           {workbook.name}
         </span>
