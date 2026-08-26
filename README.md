@@ -2,7 +2,7 @@
 
 A lightweight, self-hostable spreadsheet for [Sovereign](https://github.com/sovereignfs/sovereign), with a built-in currency conversion function.
 
-**Status:** v0.5.0 — MVP complete, workbook sharing + CSV import + cell number formatting + named ranges added (see [ROADMAP.md](ROADMAP.md))
+**Status:** v0.6.0 — MVP complete, workbook sharing + CSV import + cell number formatting + named ranges + cell styling/data validation added (see [ROADMAP.md](ROADMAP.md))
 **Plugin ID:** `fs.sovereign.sheets`
 **Route:** `/sheets`
 
@@ -16,7 +16,9 @@ standard formulas and cell references, and one custom function,
 `FINANCE(base, quote)`, Sheets' answer to `GOOGLEFINANCE()` for pulling a
 live currency exchange rate into a cell. Workbooks can be shared with other
 users on the same instance (owner/editor/viewer roles) — see SPEC.md's
-"Workbook sharing" section.
+"Workbook sharing" section. Cells support bold/italic styling and a soft
+per-cell data-validation rule (number range or list of values) — see
+SPEC.md's "Cell styling and data validation" section.
 
 See [SPEC.md](SPEC.md) for the full functional requirements and data model,
 and [ROADMAP.md](ROADMAP.md) for the proposed build order.

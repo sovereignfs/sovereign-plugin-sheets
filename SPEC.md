@@ -4,8 +4,9 @@
 **Date:** July 2026\
 **Author:** kasunben\
 **Purpose:** Canonical specification for the Sheets plugin — the single source of truth for its manifest, access model, data model, and build plan.\
-**Status:** MVP shipped (tasks 1–5); workbook sharing shipped post-MVP
-(task 6) — see ROADMAP.md.
+**Status:** MVP shipped (tasks 1–5); workbook sharing, CSV import, cell
+number formatting, named ranges, and cell styling/data validation shipped
+post-MVP (tasks 6, 8–11) — see ROADMAP.md.
 
 ---
 
@@ -56,10 +57,10 @@ explicitly future work, tracked in "Post-MVP" below, not designed away.
 **Out — explicitly deferred post-MVP:**
 
 - Real-time multiplayer editing, live cursors/presence, comments.
-- Charts, pivot tables, conditional formatting, cell styling beyond the
-  minimal format enum (no bold/italic/color — task 9 wired up the format
-  enum only), data validation. Named ranges shipped post-MVP, task 10 — see
-  "Named ranges" below.
+- Charts, pivot tables, conditional formatting, text color. Bold/italic cell
+  styling and per-cell data validation shipped post-MVP, task 11 — see "Cell
+  styling and data validation" below. Named ranges shipped post-MVP, task 10
+  — see "Named ranges" below.
 - Sharing/permissions beyond a single owner per workbook (shipped post-MVP,
   task 6 — see "Workbook sharing" below).
 - XLSX import/export (stays deferred). CSV import shipped post-MVP, task 8
@@ -351,7 +352,9 @@ selector.
 
 **Deliberately deferred, not silently dropped:**
 
-- Bold/italic/text color and other cell styling.
+- Bold/italic and other cell styling — resolved, shipped post-MVP, task 11,
+  see "Cell styling and data validation" below. Text color stays deferred
+  (task 11 only added bold/italic).
 - Conditional formatting (rule-based highlighting). Real range-based
   conditional formatting needs a multi-cell selection model this app
   doesn't have (same gap noted for multi-cell copy/paste back in task 5) —
@@ -359,7 +362,8 @@ selector.
   version is buildable without one, using the same per-cell-metadata
   mechanism this task introduces, but wasn't included in this pass either.
 - Named ranges — resolved, shipped post-MVP, task 10, see "Named ranges"
-  below. Data validation stays a separate, not-yet-designed feature.
+  below. Data validation — resolved, shipped post-MVP, task 11, see "Cell
+  styling and data validation" below.
 
 ## Named ranges (post-MVP, task 10)
 
@@ -398,8 +402,75 @@ that error message inline in the add form. Not `ActionResult`/
 `useActionState` — like cell formatting, this mutates the client-side engine
 directly, not a server action.
 
-Deliberately out of scope: data validation (restricting what a cell accepts)
-is a genuinely separate feature, not attempted here.
+Data validation (restricting what a cell accepts) — resolved, shipped
+post-MVP, task 11, see "Cell styling and data validation" below.
+
+## Cell styling and data validation (post-MVP, task 11)
+
+Generalizes the per-cell-metadata mechanism task 9 introduced for number
+formatting — same "alongside the engine, not in it" pattern — to carry two
+more kinds of per-cell metadata the HyperFormula engine has no concept of:
+text styling (bold/italic) and a soft data-validation rule.
+
+**Types (`_lib/cells.ts`):** `CellData` gains `style?: CellStyle` (`{ bold?:
+boolean; italic?: boolean }`) and `validation?: DataValidationRule`
+(`{ type: 'range'; min?: number; max?: number } | { type: 'list'; values:
+string[] }`). `CellMetadata` — the shape carried in `WorkbookView.tsx`'s
+per-sheet in-memory map — now covers all three concerns (`fmt`/`style`/
+`validation`) rather than just `fmt`. Task 9's `mergeCellFormats`/
+`extractCellFormats` are renamed and generalized to `mergeCellMetadata`/
+`extractCellMetadata`, handling all three the same way: layered onto the
+engine-derived grid immediately before `serializeCellsJson()` on every save,
+and pulled back out when a sheet's `cellsJson` is loaded into the engine.
+`serializeCellsJson()` keeps a cell with a non-default format, a non-empty
+style, or a validation rule even if it has no value yet — extended from
+task 9's format-only version of the same rule.
+
+**Cell styling — bold/italic only, no text color** (color stays deferred,
+same "Deliberately deferred" note task 9 already carried forward). UI: two
+toggle buttons (`Button` with `variant` swapped secondary/ghost and
+`aria-pressed` reflecting the active cell's current style, not a new DS
+component) in `SheetGrid.tsx`'s toolbar, next to the existing format
+`Select`. Disabled when no cell is active or `!canEdit`, same pattern as the
+format select. Toggling flips just that one style key
+(`WorkbookView.tsx`'s `handleToggleStyle`) and saves immediately, like a
+format change — not debounced. Rendering: `SheetGrid.module.css`'s
+`.cellInputBold`/`.cellInputItalic` (`font-weight: 700`/`font-style:
+italic`) applied to the cell `<input>` based on `cellMetadata[key]?.style`.
+
+**Data validation — per-cell only, not range-based**, same multi-cell-
+selection-model gap noted for conditional formatting above (task 5, task 9).
+Two rule shapes: a number range (`min`/`max`, either bound optional) and a
+list of allowed values (comma-separated in the UI, case-insensitive/trimmed
+match). UI: a "Validation" toolbar button (same enable/disable rule as the
+style toggles) opens `_components/CellValidationDialog.tsx` — a `Dialog`
+with a rule-type `Select` (No validation / Number range / List of values)
+and the matching inputs, scoped to the active cell. Saving calls
+`WorkbookView.tsx`'s `handleValidationChange`, which persists through the
+same `persistCellMetadata` path as style/format changes.
+
+**Deliberately soft, never blocking:** `_lib/validation.ts`'s
+`isCellValueValid(rawValue, rule)` checks the cell's *resolved* value (a
+formula result is checked the same as a typed literal, matching how `fmt`
+formats the resolved value in task 9) and is used only to render a visual
+`.invalid` indicator (`SheetGrid.module.css`, an inset box-shadow using
+`--sv-color-error-border`, plus `aria-invalid`) — it never rejects or blocks
+a commit. This is a deliberate architectural choice, not a scope cut: the
+grid commits on every keystroke via the cell `<input>`'s `onChange`, so hard
+validation would either reject characters mid-type or require a separate
+"blur to validate" model this grid doesn't have. An empty cell is always
+valid regardless of its rule — no data entered yet isn't the same as bad
+data.
+
+**Deliberately deferred, not silently dropped:**
+
+- Text color and any styling beyond bold/italic.
+- Range-based/multi-cell validation rules (e.g. "every cell in `A1:A20`"),
+  same multi-cell-selection-model gap as conditional formatting.
+- Custom-formula validation rules (an arbitrary boolean expression), beyond
+  the two built-in shapes (range, list).
+- Hard/blocking validation — stays out entirely per the "Deliberately soft"
+  note above, not just deferred for a future pass.
 
 ## Architecture
 
@@ -428,6 +499,7 @@ plugins/sovereign-sheets.local/
       WorkbookShareButton.tsx     # owner-only Share entry point
       WorkbookShareDialog.tsx     # member list + invite form
       SheetGrid.tsx              # active sheet's grid, reads/writes via the shared engine
+      CellValidationDialog.tsx   # per-cell range/list validation rule editor
       SheetTabs.tsx
       FormulaBar.tsx             # built on CodeTextarea (@sovereignfs/ui)
       BackLink.tsx
@@ -440,6 +512,7 @@ plugins/sovereign-sheets.local/
       frankfurter.ts             # thin fetch client for api.frankfurter.dev
       a1.ts                      # A1<->row/col helpers
       cells.ts                   # CellData/CellsMap types, cellsJson parse/serialize
+      validation.ts               # isCellValueValid(), describeValidationRule()
       csv.ts
       config.ts                  # DEFAULT_ROW_COUNT/DEFAULT_COL_COUNT
       formUtils.ts
@@ -467,7 +540,7 @@ actions), `EmptyState` (no-workbooks state).
   "schemaVersion": 1,
   "id": "fs.sovereign.sheets",
   "name": "Sheets",
-  "version": "0.2.0",
+  "version": "0.6.0",
   "description": "A lightweight spreadsheet with formulas and a built-in currency conversion function.",
   "type": "sovereign",
   "runtime": "native",
@@ -535,9 +608,11 @@ at `catalog:`; devDeps `drizzle-kit`, `@sovereignfs/tsconfig`,
   general quote interface — this still needs its own design pass, not just
   a second implementation of that interface.
 - Real-time multiplayer editing, presence, comments.
-- Charts, pivot tables, data validation. (Named ranges shipped, task 10.)
-- Richer cell styling (bold/italic/text color) and conditional formatting —
-  task 9 shipped only the number-format enum
-  (plain/number/currency/date), see "Cell number formatting" above for what
-  it deliberately left out and why.
+- Charts, pivot tables. (Named ranges shipped, task 10; data validation
+  shipped, task 11 — per-cell range/list rules only, see "Cell styling and
+  data validation" above.)
+- Text color and conditional formatting — task 9 shipped only the
+  number-format enum (plain/number/currency/date) and task 11 added
+  bold/italic on top of it, see "Cell number formatting" and "Cell styling
+  and data validation" above for what was deliberately left out and why.
 - XLSX import/export (either direction).

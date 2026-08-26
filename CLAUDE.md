@@ -12,8 +12,10 @@ equivalent), and workbook-level sharing (owner/editor/viewer). A
 
 **Status: MVP shipped** (tasks 1–5 in ROADMAP.md) — workbooks, sheets,
 HyperFormula-backed formulas, `FINANCE()`, and CSV export are all live at
-`/sheets`. **Workbook sharing shipped post-MVP** (task 6), alongside a
-`ThreeColumnLayout` home redesign — see SPEC.md's "Workbook sharing" section.
+`/sheets`. **Workbook sharing, CSV import, cell number formatting, named
+ranges, and cell styling/data validation shipped post-MVP** (tasks 6, 8–11)
+— see SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/
+"Named ranges"/"Cell styling and data validation" sections.
 
 Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
@@ -37,21 +39,25 @@ implementation; SPEC.md's "Post-MVP" section is where deferred features are
 tracked, not silently reintroduced into an MVP task.
 
 **Workbook sharing (task 6), CSV import (task 8), cell number formatting
-(task 9), and named ranges (task 10) are the deliberate exceptions** — all
-shipped post-MVP as scoped-in additions, not scope creep: SPEC.md's
-"Workbook sharing"/"CSV import"/"Cell number formatting"/"Named ranges"
-sections are the design records. Sharing is still *workbook-level* only (no
-per-sheet sharing, no real-time multiplayer/presence/comments — those stay
-out per the bullet above); CSV import is still *single-sheet, full-replace*
-only (no full-workbook import, no XLSX, no merge-with-existing-data mode);
-cell formatting is still *the number-format enum only* (no bold/italic/
-color, no conditional formatting — task 9 deliberately shipped a thinner
-slice of "richer cell formatting / conditional formatting" than the full
-phrase implies); named ranges is *just names → formula/reference*, no data
-validation (the other half of the original "named ranges, data validation"
-backlog item — still not started). Don't conflate "sharing/import/
-formatting/named-ranges shipped" with "collaboration/full-fidelity import/
-full styling/data validation shipped."
+(task 9), named ranges (task 10), and cell styling + data validation
+(task 11) are the deliberate exceptions** — all shipped post-MVP as
+scoped-in additions, not scope creep: SPEC.md's "Workbook sharing"/"CSV
+import"/"Cell number formatting"/"Named ranges"/"Cell styling and data
+validation" sections are the design records. Sharing is still
+*workbook-level* only (no per-sheet sharing, no real-time
+multiplayer/presence/comments — those stay out per the bullet above); CSV
+import is still *single-sheet, full-replace* only (no full-workbook import,
+no XLSX, no merge-with-existing-data mode); cell formatting is still *the
+number-format enum plus bold/italic* (no text color, no conditional
+formatting — task 9 shipped the format enum, task 11 added bold/italic on
+top of it, still a thinner slice of "richer cell formatting / conditional
+formatting" than the full phrase implies); named ranges is *just names →
+formula/reference*; data validation (task 11) is *per-cell soft validation
+only* — a number-range or list rule that renders a visual indicator, never
+blocks a commit, and has no range-based/multi-cell or custom-formula rule
+support. Don't conflate "sharing/import/formatting/named-ranges/validation
+shipped" with "collaboration/full-fidelity import/full styling/hard
+validation shipped."
 
 ## `FINANCE()` is currency conversion only
 
@@ -124,4 +130,4 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.5.0** (task 10 — named ranges, built on HyperFormula's native named-expression API — see ROADMAP.md)
+Current version: **0.6.0** (task 11 — bold/italic cell styling and per-cell soft data validation, generalizing task 9's per-cell-metadata mechanism — see ROADMAP.md)

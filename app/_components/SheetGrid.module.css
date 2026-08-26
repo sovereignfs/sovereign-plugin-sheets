@@ -84,3 +84,15 @@
   outline: 2px solid var(--sv-color-accent);
   outline-offset: -2px;
 }
+
+.cellInputBold {
+  font-weight: 700;
+}
+
+.cellInputItalic {
+  font-style: italic;
+}
+
+.invalid {
+  box-shadow: inset 0 0 0 1px var(--sv-color-error-border);
+}

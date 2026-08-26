@@ -23,11 +23,14 @@ import type { ActionResult } from '../_lib/context';
 import { DEFAULT_COL_COUNT, DEFAULT_ROW_COUNT } from '../_lib/config';
 import { cellsMapToGrid, createEngine, gridToCellsMap } from '../_lib/formula-engine';
 import {
-  extractCellFormats,
-  mergeCellFormats,
+  extractCellMetadata,
+  mergeCellMetadata,
   parseCellsJson,
   serializeCellsJson,
   type CellFormat,
+  type CellMetadata,
+  type CellStyle,
+  type DataValidationRule,
 } from '../_lib/cells';
 import { extractFinancePairs, getCachedRate, setCachedRate } from '../_lib/finance-function';
 import type { WorkbookMemberView } from '../_lib/workbook-sharing';
@@ -85,12 +88,13 @@ export function WorkbookView({
   // need every sheet loaded), created once and mutated in place.
   const engineRef = useRef<ReturnType<typeof createEngine> | null>(null);
   const hfSheetIds = useRef<Map<string, number>>(new Map());
-  // Per-sheet number-format overrides — the HyperFormula engine only knows
-  // values/formulas, not this plugin's own `fmt` metadata, so it's tracked
-  // alongside the engine rather than in it. Read back into `cellsJson` via
-  // `mergeCellFormats` at every save (`saveAllSheets`/SheetGrid's own
-  // autosave), same pattern as `finance-function.ts`'s rate cache.
-  const formatMaps = useRef<Map<string, Record<string, CellFormat>>>(new Map());
+  // Per-sheet cell metadata (number format, bold/italic, validation rule) —
+  // the HyperFormula engine only knows values/formulas, not this plugin's
+  // own per-cell metadata, so it's tracked alongside the engine rather than
+  // in it. Read back into `cellsJson` via `mergeCellMetadata` at every save
+  // (`saveAllSheets`/SheetGrid's own autosave), same pattern as
+  // `finance-function.ts`'s rate cache.
+  const cellMetadataMaps = useRef<Map<string, Record<string, CellMetadata>>>(new Map());
   if (!engineRef.current) {
     const engine = createEngine();
     for (const sheet of [...initialSheets].sort((a, b) => a.position - b.position)) {
@@ -100,7 +104,7 @@ export function WorkbookView({
       hfSheetIds.current.set(sheet.id, hfId);
       const cells = parseCellsJson(sheet.cellsJson);
       engine.setSheetContent(hfId, cellsMapToGrid(cells, sheet.rowCount, sheet.colCount));
-      formatMaps.current.set(sheet.id, extractCellFormats(cells));
+      cellMetadataMaps.current.set(sheet.id, extractCellMetadata(cells));
     }
     // After every sheet exists — a named expression referencing a sheet
     // (e.g. "=Sheet1!$B$2") throws if that sheet isn't registered yet.
@@ -131,7 +135,7 @@ export function WorkbookView({
     engine.addSheet(created.name);
     const hfId = engine.getSheetId(created.name);
     if (hfId !== undefined) hfSheetIds.current.set(created.id, hfId);
-    formatMaps.current.set(created.id, {});
+    cellMetadataMaps.current.set(created.id, {});
     setSheetList((prev) => [
       ...prev,
       {
@@ -162,7 +166,7 @@ export function WorkbookView({
       engine.removeSheet(hfId);
       hfSheetIds.current.delete(id);
     }
-    formatMaps.current.delete(id);
+    cellMetadataMaps.current.delete(id);
     const remaining = sheetList.filter((s) => s.id !== id);
     setSheetList(remaining);
     if (activeSheetId === id) {
@@ -196,35 +200,64 @@ export function WorkbookView({
       const hfId = hfSheetIds.current.get(sheet.id);
       if (hfId === undefined) continue;
       const grid = engine.getSheetSerialized(hfId);
-      const formats = formatMaps.current.get(sheet.id) ?? {};
+      const metadata = cellMetadataMaps.current.get(sheet.id) ?? {};
       void saveSheetCellsAction(
         workbookId,
         sheet.id,
-        serializeCellsJson(mergeCellFormats(gridToCellsMap(grid), formats)),
+        serializeCellsJson(mergeCellMetadata(gridToCellsMap(grid), metadata)),
       );
     }
   }
 
-  /** Format-select changes are discrete, infrequent actions — saved immediately, not debounced like typing. */
-  function handleFormatChange(sheetId: string, targetCellKey: string, fmt: CellFormat) {
+  /** Persists one sheet's current engine content + updated cell-metadata map immediately (not debounced — these are discrete, infrequent actions, unlike keystroke-by-keystroke typing). */
+  function persistCellMetadata(sheetId: string, metadata: Record<string, CellMetadata>) {
     if (!engine) return;
     const hfId = hfSheetIds.current.get(sheetId);
     if (hfId === undefined) return;
-
-    // Setting it to 'plain' explicitly (rather than deleting the key) is
-    // enough — mergeCellFormats already skips 'plain' entries on save, so
-    // this never persists, but it does correctly overwrite whatever
-    // non-plain value the key previously held in this in-memory map.
-    const next = { ...formatMaps.current.get(sheetId), [targetCellKey]: fmt };
-    formatMaps.current.set(sheetId, next);
-    setVersion((v) => v + 1);
-
     const grid = engine.getSheetSerialized(hfId);
     void saveSheetCellsAction(
       workbookId,
       sheetId,
-      serializeCellsJson(mergeCellFormats(gridToCellsMap(grid), next)),
+      serializeCellsJson(mergeCellMetadata(gridToCellsMap(grid), metadata)),
     );
+  }
+
+  function handleFormatChange(sheetId: string, targetCellKey: string, fmt: CellFormat) {
+    const current = cellMetadataMaps.current.get(sheetId) ?? {};
+    const currentCell = current[targetCellKey] ?? {};
+    // Setting `fmt: 'plain'` explicitly (rather than deleting the key) is
+    // enough — mergeCellMetadata already skips 'plain' entries on save, so
+    // this never persists, but it does correctly overwrite whatever
+    // non-plain value the key previously held in this in-memory map.
+    const next = { ...current, [targetCellKey]: { ...currentCell, fmt } };
+    cellMetadataMaps.current.set(sheetId, next);
+    setVersion((v) => v + 1);
+    persistCellMetadata(sheetId, next);
+  }
+
+  /** Toggles one style flag (bold or italic) on the active cell, preserving the other. */
+  function handleToggleStyle(sheetId: string, targetCellKey: string, styleKey: keyof CellStyle) {
+    const current = cellMetadataMaps.current.get(sheetId) ?? {};
+    const currentCell = current[targetCellKey] ?? {};
+    const nextStyle: CellStyle = { ...currentCell.style, [styleKey]: !currentCell.style?.[styleKey] };
+    const next = { ...current, [targetCellKey]: { ...currentCell, style: nextStyle } };
+    cellMetadataMaps.current.set(sheetId, next);
+    setVersion((v) => v + 1);
+    persistCellMetadata(sheetId, next);
+  }
+
+  /** `rule: undefined` clears validation for the cell. */
+  function handleValidationChange(
+    sheetId: string,
+    targetCellKey: string,
+    rule: DataValidationRule | undefined,
+  ) {
+    const current = cellMetadataMaps.current.get(sheetId) ?? {};
+    const currentCell = current[targetCellKey] ?? {};
+    const next = { ...current, [targetCellKey]: { ...currentCell, validation: rule } };
+    cellMetadataMaps.current.set(sheetId, next);
+    setVersion((v) => v + 1);
+    persistCellMetadata(sheetId, next);
   }
 
   /** Returns an error message on failure (surfaced inline by NamedRangesButton), or undefined on success. */
@@ -392,8 +425,14 @@ export function WorkbookView({
               ),
             );
           }}
-          formatMap={formatMaps.current.get(activeSheet.id) ?? {}}
+          cellMetadata={cellMetadataMaps.current.get(activeSheet.id) ?? {}}
           onFormatChange={(targetCellKey, fmt) => handleFormatChange(activeSheet.id, targetCellKey, fmt)}
+          onToggleStyle={(targetCellKey, styleKey) =>
+            handleToggleStyle(activeSheet.id, targetCellKey, styleKey)
+          }
+          onValidationChange={(targetCellKey, rule) =>
+            handleValidationChange(activeSheet.id, targetCellKey, rule)
+          }
           canEdit={canEdit}
         />
       )}

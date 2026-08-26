@@ -12,11 +12,21 @@ import {
 } from '@sovereignfs/ui';
 import { resizeSheetAction, saveSheetCellsAction } from '../actions';
 import { cellKey, colIndexToLetters } from '../_lib/a1';
-import { CELL_FORMATS, mergeCellFormats, serializeCellsJson, type CellFormat } from '../_lib/cells';
+import {
+  CELL_FORMATS,
+  mergeCellMetadata,
+  serializeCellsJson,
+  type CellFormat,
+  type CellMetadata,
+  type CellStyle,
+  type DataValidationRule,
+} from '../_lib/cells';
 import { MAX_IMPORT_COL_COUNT, MAX_IMPORT_ROW_COUNT } from '../_lib/config';
 import { cellsToCsv, downloadCsv, parseCsv } from '../_lib/csv';
 import { displayValue, gridToCellsMap } from '../_lib/formula-engine';
 import { formatCellValue } from '../_lib/format';
+import { isCellValueValid } from '../_lib/validation';
+import { CellValidationDialog } from './CellValidationDialog';
 import { FormulaBar } from './FormulaBar';
 import styles from './SheetGrid.module.css';
 
@@ -40,8 +50,10 @@ export function SheetGrid({
   onVersionChange,
   onCellCommitted,
   onSheetResized,
-  formatMap,
+  cellMetadata,
   onFormatChange,
+  onToggleStyle,
+  onValidationChange,
   canEdit,
 }: {
   engine: HyperFormula;
@@ -56,16 +68,19 @@ export function SheetGrid({
   onCellCommitted?: (raw: string) => void;
   /** CSV import grew the sheet past its current stored dimensions — update the caller's own row/col state. */
   onSheetResized?: (rowCount: number, colCount: number) => void;
-  /** Per-cell number-format overrides for the active sheet, keyed by A1 cell key. */
-  formatMap: Record<string, CellFormat>;
+  /** Per-cell format/style/validation overrides for the active sheet, keyed by A1 cell key. */
+  cellMetadata: Record<string, CellMetadata>;
   onFormatChange: (cellKey: string, fmt: CellFormat) => void;
-  /** Viewer role: grid and formula bar render read-only, no autosave, no fill-down, no import, no format changes. */
+  onToggleStyle: (cellKey: string, styleKey: keyof CellStyle) => void;
+  onValidationChange: (cellKey: string, rule: DataValidationRule | undefined) => void;
+  /** Viewer role: grid and formula bar render read-only, no autosave, no fill-down, no import, no format/style/validation changes. */
   canEdit: boolean;
 }) {
   const [status, setStatus] = useState<StatusBadgeStatus>('synced');
   const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [validationDialogOpen, setValidationDialogOpen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -86,7 +101,7 @@ export function SheetGrid({
   function getDisplay(row: number, col: number): string {
     const value = engine.getCellValue({ sheet: hfSheetId, row, col });
     const raw = displayValue(value);
-    const fmt = formatMap[cellKey(row, col)];
+    const fmt = cellMetadata[cellKey(row, col)]?.fmt;
     return formatCellValue(raw, fmt, value, engine);
   }
 
@@ -95,7 +110,7 @@ export function SheetGrid({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const grid = engine.getSheetSerialized(hfSheetId);
-      const cells = mergeCellFormats(gridToCellsMap(grid), formatMap);
+      const cells = mergeCellMetadata(gridToCellsMap(grid), cellMetadata);
       void saveSheetCellsAction(workbookId, sheetId, serializeCellsJson(cells))
         .then(() => setStatus('synced'))
         .catch(() => {
@@ -246,6 +261,9 @@ export function SheetGrid({
     }
   }
 
+  const activeCellKey = activeCell ? cellKey(activeCell.row, activeCell.col) : null;
+  const activeMetadata = activeCellKey ? cellMetadata[activeCellKey] : undefined;
+
   return (
     <div className={styles.wrapper}>
       <FormulaBar
@@ -261,9 +279,9 @@ export function SheetGrid({
         <Select
           size="sm"
           className={styles.formatSelect}
-          value={activeCell ? (formatMap[cellKey(activeCell.row, activeCell.col)] ?? 'plain') : 'plain'}
+          value={activeMetadata?.fmt ?? 'plain'}
           onChange={(e) => {
-            if (activeCell) onFormatChange(cellKey(activeCell.row, activeCell.col), e.target.value as CellFormat);
+            if (activeCellKey) onFormatChange(activeCellKey, e.target.value as CellFormat);
           }}
           disabled={!activeCell || !canEdit}
           aria-label="Cell format"
@@ -274,6 +292,34 @@ export function SheetGrid({
             </option>
           ))}
         </Select>
+        <Button
+          variant={activeMetadata?.style?.bold ? 'secondary' : 'ghost'}
+          size="sm"
+          aria-pressed={activeMetadata?.style?.bold ?? false}
+          aria-label="Bold"
+          disabled={!activeCell || !canEdit}
+          onClick={() => activeCellKey && onToggleStyle(activeCellKey, 'bold')}
+        >
+          <strong>B</strong>
+        </Button>
+        <Button
+          variant={activeMetadata?.style?.italic ? 'secondary' : 'ghost'}
+          size="sm"
+          aria-pressed={activeMetadata?.style?.italic ?? false}
+          aria-label="Italic"
+          disabled={!activeCell || !canEdit}
+          onClick={() => activeCellKey && onToggleStyle(activeCellKey, 'italic')}
+        >
+          <em>I</em>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!activeCell || !canEdit}
+          onClick={() => setValidationDialogOpen(true)}
+        >
+          Validation
+        </Button>
         <div className={styles.toolbarSpacer} />
         <Button variant="ghost" size="sm" onClick={handleExportCsv}>
           Export CSV
@@ -314,6 +360,16 @@ export function SheetGrid({
                 {columnLabels.map((_, col) => {
                   const key = cellKey(row, col);
                   const isActive = activeCell?.row === row && activeCell?.col === col;
+                  const meta = cellMetadata[key];
+                  const valid = isCellValueValid(engine.getCellValue({ sheet: hfSheetId, row, col }), meta?.validation);
+                  const inputClassName = [
+                    styles.cellInput,
+                    meta?.style?.bold && styles.cellInputBold,
+                    meta?.style?.italic && styles.cellInputItalic,
+                    !valid && styles.invalid,
+                  ]
+                    .filter(Boolean)
+                    .join(' ');
                   return (
                     <td key={key} className={styles.cell}>
                       <input
@@ -321,13 +377,14 @@ export function SheetGrid({
                           if (el) inputRefs.current.set(key, el);
                           else inputRefs.current.delete(key);
                         }}
-                        className={styles.cellInput}
+                        className={inputClassName}
                         value={isActive ? getRawInput(row, col) : getDisplay(row, col)}
                         readOnly={!canEdit}
                         onFocus={() => setActiveCell({ row, col })}
                         onChange={(e) => commitCell(row, col, e.target.value)}
                         onKeyDown={(e) => handleKeyDown(e, row, col)}
                         aria-label={key}
+                        aria-invalid={!valid || undefined}
                       />
                     </td>
                   );
@@ -352,6 +409,16 @@ export function SheetGrid({
         confirmLabel={importing ? 'Importing…' : 'Import'}
         destructive
         pending={importing}
+      />
+
+      <CellValidationDialog
+        open={validationDialogOpen}
+        onClose={() => setValidationDialogOpen(false)}
+        cellLabel={activeCellKey ?? ''}
+        currentRule={activeMetadata?.validation}
+        onSave={(rule) => {
+          if (activeCellKey) onValidationChange(activeCellKey, rule);
+        }}
       />
     </div>
   );
