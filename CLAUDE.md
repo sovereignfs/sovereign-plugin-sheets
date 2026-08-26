@@ -22,8 +22,9 @@ visibility fix, multi-cell selection (range formatting, copy/cut/
 paste, bulk clear), a click-to-select/double-click-to-edit interaction
 model, cell font size, a toolbar icon polish pass, a font-color
 default swatch fix, color-picker auto-close-on-selection, Home page
-polish (shared-heading spacing + a ghost "add" tile), and a ghost-tile
-position + sizing fix shipped post-MVP** (tasks 6, 8–11, 13–29) —
+polish (shared-heading spacing + a ghost "add" tile), a ghost-tile
+position + sizing fix, and a critical missing-Postgres-migrations fix
+shipped post-MVP** (tasks 6, 8–11, 13–30) —
 see SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/"Named
 ranges"/"Cell styling and data validation"/"Full-workbook JSON
 export/import"/"Sheet size: default and manual growth"/"Workbook editor
@@ -34,7 +35,8 @@ color"/"Cell color visibility fixes"/"Multi-cell selection"/"Click to
 select, double-click to edit"/"Cell font size"/"Toolbar icon polish:
 Bold/Italic/Fill color"/"Font color default swatch fix"/"Color picker
 auto-close on selection"/"Home page polish: shared-heading spacing +
-ghost \"add\" tile"/"Ghost tile position + sizing fix" sections.
+ghost \"add\" tile"/"Ghost tile position + sizing fix"/"Critical: missing
+Postgres migrations" sections.
 
 Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
@@ -169,7 +171,61 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.17.1** — fix: task 29, ghost tile position + sizing
+Current version: **0.17.2** — fix: missing Postgres migrations, a critical
+production bug found immediately after tasks 12–29 (this plugin's own
+`migrations/sqlite/` history) shipped and deployed to a real Postgres-backed
+instance for the first time. `migrations/postgres/` had never existed for
+this plugin at all — not a regression from this session's work specifically,
+a gap since the plugin's inception (task 6's `workbook_members` table,
+already 20+ tasks old, had simply never had a Postgres migration generated).
+The runtime's automatic migration-on-startup silently `continue`s past any
+plugin whose `migrations/postgres/` folder doesn't exist
+(`runtime/src/plugin-migrations.ts`) — no error, no log line — so this had
+no visible symptom until a real deploy actually hit it: every query against
+`workbook_members` (the Home page's very first query, `listWorkbooksOverview`)
+failed with Postgres error `42P01, relation "workbook_members" does not
+exist`, surfacing as a generic error boundary on `/sheets` for every user.
+
+Fixed by adding the missing `app/_db/schema.postgres.ts` (a `pgTable`-based
+structural mirror of `app/_db/schema.ts`, driving `drizzle-kit generate
+--dialect postgresql` — it cannot read a `sqliteTable()` schema directly),
+`drizzle.config.pg.ts`, and a `db:generate:pg` package.json script — the
+same three-file pattern every other isolated Postgres-capable plugin
+(`kanban`, `docs`, `tasks`, `shopper`, `plainwrite`) already has, just never
+added here. Generated the single initial `migrations/postgres/0000_*.sql`
+covering all four tables (`workbooks`, `sheets`, `workbook_members`,
+`finance_rate_cache`) in one shot — a first-time install has no prior
+Postgres migration history to preserve or reconcile.
+
+**Timestamps deliberately use `bigint({ mode: 'number' })`, not plain
+`integer`**, diverging from `docs/plugin-database.md`'s general "never
+bigint" guidance for a documented reason: Postgres `integer` is a real,
+fixed 32-bit type (max 2147483647), and a Unix millisecond timestamp is a
+13-digit number, already ~800x past that limit — `sovereign-plugin-kanban`
+hit exactly this in production (every insert failing immediately,
+`value "..." is out of range for type integer`) and had to `ALTER COLUMN
+... SET DATA TYPE bigint` on every timestamp column after the fact. Written
+correctly here from the start instead of repeating that incident — every
+timestamp column (`createdAt`, `updatedAt`, `deletedAt`, `joinedAt`,
+`lastOpenedAt`, `asOf`, `fetchedAt`) is `bigint`; non-timestamp integers
+(`position`, `rowCount`, `colCount` — small values, no overflow risk) stay
+plain `integer`, matching Kanban's own `done` column precedent.
+
+Also manually stripped the schema qualifier from both generated
+`REFERENCES "public"."workbooks"(...)` foreign-key constraints down to
+unqualified `REFERENCES "workbooks"(...)` — a plugin's tables live in
+`plugin_<slug>`, reached only via the connection's `search_path`, never
+literally in `public`; the qualified form fails at migration time
+(`docs/plugin-database.md`'s "Foreign keys in a Postgres schema"). Confirmed
+via `pnpm --filter @sovereignfs/sovereign-sheets typecheck` and a full
+review of the generated SQL; not live-verified against a real Postgres
+instance from this environment (no direct access to the affected
+production database) — verification is the operator re-running migrations
+(automatically on the next container recreate, or manually via
+`sv plugin migrate fs.sovereign.sheets` against a rebuilt image) and
+confirming `/sheets` loads.
+
+(Previous version: 0.17.1 — task 29, ghost tile position + sizing
 fix, direct follow-up to task 28 reported against a fuller account that
 exposed what task 28's own sparse 2-tile test grid hadn't.
 
