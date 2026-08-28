@@ -5,6 +5,7 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "scripts": {
+    "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate --schema app/_db/schema.ts --out migrations/sqlite --dialect sqlite",
     "db:generate:pg": "drizzle-kit generate --schema app/_db/schema.postgres.ts --out migrations/postgres --dialect postgresql"
@@ -24,6 +25,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "drizzle-kit": "^0.31.10",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.8"
   }
 }
