@@ -22,7 +22,7 @@ ambition is a genuine alternative to Google Sheets; the MVP specced here is
 deliberately small: a single-user grid with formulas and one custom function,
 `FINANCE()`, for currency conversion — Sheets' analogue to `GOOGLEFINANCE()`.
 
-The UI should *feel* like a familiar spreadsheet (grid, formula bar, sheet
+The UI should _feel_ like a familiar spreadsheet (grid, formula bar, sheet
 tabs). The formula/function surface should track Google Sheets conventions
 where practical (cell refs, ranges, common function names) so muscle memory
 and ported formulas mostly work, without committing to full Excel/Sheets
@@ -33,8 +33,8 @@ fidelity in the MVP.
 Google Sheets does a lot: real-time multiplayer editing, comments, charts,
 pivot tables, conditional formatting, hundreds of functions, import/export of
 every spreadsheet format in existence. None of that ships in v0.1. The MVP
-answers one question: *can a single user open a grid, type formulas that
-recalculate correctly, and pull in a live currency rate?* Everything else is
+answers one question: _can a single user open a grid, type formulas that
+recalculate correctly, and pull in a live currency rate?_ Everything else is
 explicitly future work, tracked in "Post-MVP" below, not designed away.
 
 ## MVP scope
@@ -53,7 +53,7 @@ explicitly future work, tracked in "Post-MVP" below, not designed away.
   (`A1:B10`), cross-sheet references (`Sheet2!A1`).
 - Built-in function library (provided natively by the formula engine — no
   custom implementation needed): `SUM, AVERAGE, COUNT, COUNTA, MIN, MAX, IF,
-  AND, OR, NOT, CONCATENATE, LEN, UPPER, LOWER, TRIM, ROUND, ABS, TODAY, NOW`.
+AND, OR, NOT, CONCATENATE, LEN, UPPER, LOWER, TRIM, ROUND, ABS, TODAY, NOW`.
 - One custom function: `FINANCE(base, quote)` — see "The FINANCE() function"
   below.
 - Save/load; single owner per workbook.
@@ -136,7 +136,7 @@ calls:
   track against, unlike a metered provider.
 - **Resolved, task 7:** the provider client sits behind a small interface,
   `FxRateProvider` (`_lib/fx-rate-provider.ts`) — `getRates(base, quotes):
-  Promise<{date, rates} | null>`. Frankfurter (`_lib/frankfurter.ts`'s
+Promise<{date, rates} | null>`. Frankfurter (`_lib/frankfurter.ts`'s
   `frankfurterProvider`) is the sole implementation today, wired in at
   `actions.ts`'s single `FX_PROVIDER` binding; swapping providers means
   writing a new implementation and changing that one line, without touching
@@ -162,7 +162,7 @@ for everything else.** The formula engine holds the live grid in memory; MVP
 is single-user/single-workbook-per-doc with no concurrent-writer conflict
 resolution, so coarse, debounced whole-sheet saves are simpler and sufficient
 than per-cell row diffing. Revisit per-cell rows only if real-time
-collaboration or very large sheets are added post-MVP — that *would* need
+collaboration or very large sheets are added post-MVP — that _would_ need
 CRDT-friendly per-cell storage.
 
 ```ts
@@ -171,21 +171,21 @@ CRDT-friendly per-cell storage.
 // column are still required per docs/plugin-database.md)
 
 export const workbooks = sqliteTable('workbooks', {
-  id: text('id').primaryKey(),                 // ULID
+  id: text('id').primaryKey(), // ULID
   tenantId: text('tenant_id').notNull(),
   ownerUserId: text('owner_user_id').notNull(),
   name: text('name').notNull(),
   activeSheetId: text('active_sheet_id'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
-  deletedAt: integer('deleted_at'),             // soft delete
+  deletedAt: integer('deleted_at'), // soft delete
 });
 
 export const sheets = sqliteTable('sheets', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull(),
   workbookId: text('workbook_id').notNull(),
-  name: text('name').notNull(),                 // tab label, unique per workbook (app-enforced)
+  name: text('name').notNull(), // tab label, unique per workbook (app-enforced)
   position: integer('position').notNull(),
   rowCount: integer('row_count').notNull().default(200),
   colCount: integer('col_count').notNull().default(26),
@@ -196,10 +196,10 @@ export const sheets = sqliteTable('sheets', {
 // Instance-wide — deliberately NOT tenant/user-scoped (public market data),
 // same pattern as ledger_fx_rates.
 export const financeRateCache = sqliteTable('finance_rate_cache', {
-  base: text('base').notNull(),                  // e.g. 'USD'
-  quote: text('quote').notNull(),                 // e.g. 'EUR'
-  rate: text('rate').notNull(),                    // canonical decimal string, never a float
-  asOf: integer('as_of').notNull(),                 // rate's reference date, unix seconds
+  base: text('base').notNull(), // e.g. 'USD'
+  quote: text('quote').notNull(), // e.g. 'EUR'
+  rate: text('rate').notNull(), // canonical decimal string, never a float
+  asOf: integer('as_of').notNull(), // rate's reference date, unix seconds
   fetchedAt: integer('fetched_at').notNull(),
   source: text('source').notNull().default('frankfurter'),
   // primary key (base, quote)
@@ -231,7 +231,9 @@ put sharing at.
 export const workbookMembers = sqliteTable(
   'workbook_members',
   {
-    workbookId: text('workbook_id').notNull().references(() => workbooks.id),
+    workbookId: text('workbook_id')
+      .notNull()
+      .references(() => workbooks.id),
     userId: text('user_id').notNull(),
     tenantId: text('tenant_id').notNull(),
     role: text('role', { enum: ['owner', 'editor', 'viewer'] }).notNull(),
@@ -320,7 +322,7 @@ since task 1 but had no UI or display logic wired to it — see the note on
 MVP scope's "Minimal display formatting" bullet above. **This is a partial
 slice of "richer cell formatting / conditional formatting"** — deliberately
 scoped down to just the number-format enum for this task; bold/italic/text
-color and conditional formatting are explicitly *not* included here (see
+color and conditional formatting are explicitly _not_ included here (see
 "Deliberately deferred" below), so the underlying per-cell-metadata
 mechanism this task introduces gets proven with one concern before more are
 layered onto it.
@@ -328,7 +330,7 @@ layered onto it.
 **UI:** a `Select` in `SheetGrid.tsx`'s toolbar (left side, next to the
 existing right-aligned Export/Import CSV group), showing/editing the active
 cell's format. Disabled when no cell is active or `!canEdit` (same pattern
-as the formula bar). Applies only to the *display* value (`getDisplay`) —
+as the formula bar). Applies only to the _display_ value (`getDisplay`) —
 the active cell's raw input (formula/typed value, shown while editing) is
 never reformatted, matching how Excel/Sheets only format the settled value.
 
@@ -401,7 +403,7 @@ action) — the client already holds the authoritative set, mirrored into the
 engine for live formula resolution, same pattern task 9 established for cell
 format overrides.
 
-**Load order matters:** named ranges are registered with the engine *after*
+**Load order matters:** named ranges are registered with the engine _after_
 every sheet has been added (`WorkbookView.tsx`'s engine-setup effect) — an
 expression referencing a sheet (`=Sheet1!$B$2`) throws if that sheet doesn't
 exist in the engine yet.
@@ -461,7 +463,7 @@ and the matching inputs, scoped to the active cell. Saving calls
 same `persistCellMetadata` path as style/format changes.
 
 **Deliberately soft, never blocking:** `_lib/validation.ts`'s
-`isCellValueValid(rawValue, rule)` checks the cell's *resolved* value (a
+`isCellValueValid(rawValue, rule)` checks the cell's _resolved_ value (a
 formula result is checked the same as a typed literal, matching how `fmt`
 formats the resolved value in task 9) and is used only to render a visual
 `.invalid` indicator (`SheetGrid.module.css`, an inset box-shadow using
@@ -489,7 +491,7 @@ CSV export/import (tasks 5/8) is a values-only snapshot of one sheet — it
 can't carry formulas, cell styling, validation rules, or named ranges,
 because CSV has no way to represent any of that. This task adds a second,
 additive export/import format, alongside CSV rather than replacing it:
-a full-fidelity JSON snapshot of the *whole workbook* — every sheet's
+a full-fidelity JSON snapshot of the _whole workbook_ — every sheet's
 values/formulas/format/style/validation, plus named ranges — that round-trips
 losslessly. Explicitly a backup/restore format for this plugin, not an
 interchange format: the file doesn't open in Excel/Google Sheets. Real
@@ -499,11 +501,11 @@ see "Post-MVP" below for the tradeoffs that decided it.
 **Why lossless is basically free here:** persistence already round-trips
 formulas correctly — `WorkbookView.tsx`'s save path
 (`engine.getSheetSerialized()` → `gridToCellsMap()`) stores a formula cell's
-*serialized* content (`"=B2+B3"`, not its computed result) into `cellsJson`'s
+_serialized_ content (`"=B2+B3"`, not its computed result) into `cellsJson`'s
 `v` field, and load feeds that string straight back into
 `engine.setSheetContent()`, where HyperFormula re-parses any leading `=` as a
 live formula again. (This is a different, non-lossy path from CSV export's
-own `getDisplay()`/`getCellValue()`, which *does* resolve formulas to their
+own `getDisplay()`/`getCellValue()`, which _does_ resolve formulas to their
 computed value — see CSV import's own section above for why CSV round-tripping
 is lossy.) Since normal autosave already preserves formulas/style/format/
 validation exactly, the export format just serializes that same
@@ -521,7 +523,13 @@ interface WorkbookExportPayload {
   workbook: {
     name: string;
     namedRangesJson: string; // same `{ [name]: expression }` shape as workbooks.named_ranges_json
-    sheets: { name: string; position: number; rowCount: number; colCount: number; cellsJson: string }[];
+    sheets: {
+      name: string;
+      position: number;
+      rowCount: number;
+      colCount: number;
+      cellsJson: string;
+    }[];
   };
 }
 ```
@@ -558,7 +566,7 @@ parsing every row), and round-trips each sheet's `cellsJson`/the workbook's
 `serializeCellsJson` pair so a hand-edited or malicious file can't smuggle
 unrecognized keys into storage. `ImportWorkbookButton` calls this
 client-side first, purely for immediate feedback (a toast) before ever
-hitting the network — but `importWorkbookAction` calls the *same* function
+hitting the network — but `importWorkbookAction` calls the _same_ function
 again server-side, which is the real trust boundary: a server action is a
 public endpoint dispatched by action id, not gated by whichever UI happens
 to call it.
@@ -571,8 +579,7 @@ whole request body at 1MB by default. Rather than take on a platform-wide
 `MAX_IMPORT_FILE_SIZE_BYTES` (800 KB, `_lib/config.ts`) stays comfortably
 under that ceiling — generous for the realistic case (a sparse `cellsJson`
 blob for a normal-sized workbook is tens to low-hundreds of KB) while still
-rejecting a pathological file with a clear error instead of a framework-level
-500.
+rejecting a pathological file with a clear error instead of a framework-level 500.
 
 **Deliberately deferred, not silently dropped:**
 
@@ -587,7 +594,7 @@ rejecting a pathological file with a clear error instead of a framework-level
   silently dropped on import. Worth building if genuine Excel
   interoperability becomes the actual goal, not just backup/restore within
   Sheets — a separate, larger task, not a natural extension of this one.
-- Importing *into* an existing workbook (merge, or per-sheet append) — only
+- Importing _into_ an existing workbook (merge, or per-sheet append) — only
   "create a new workbook" is supported; see the UX note above for why.
 - A schema-migration path for a future `formatVersion` bump — today an
   unrecognized version is a flat rejection, not a best-effort upgrade. Revisit
@@ -640,14 +647,14 @@ Sheets-specific reinvention:
 - **Compact identity row** (`WorkbookView.module.css`'s `.metaBar`,
   replacing the old two-line `.header`/`.titleRow`): an icon-only back
   button (`Icon name="chevron-left"`, 32×32, `aria-label="Back to
-  workbooks"`, no visible text) sits on the same line as the workbook name,
+workbooks"`, no visible text) sits on the same line as the workbook name,
   not above it. `_components/BackLink.tsx` (a text-link "← Back to X"
   component, one plugin-local caller) is deleted outright as dead code now
   that this is the only place it was used.
 - **The title truncates, it doesn't wrap or push the action group
   off-screen**: `.titleBlock { flex: 1 1 auto; min-width: 160px; overflow:
-  hidden; }` plus `.title { overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; }`. Sheets' title is plain read-only text (no
+hidden; }` plus `.title { overflow: hidden; text-overflow: ellipsis;
+white-space: nowrap; }`. Sheets' title is plain read-only text (no
   inline-rename affordance the way Docs' editable `<input>` title needs), so
   none of Docs' JS-measured `titleMirror`/`titleInputWrap` width-clamping
   machinery is needed here — plain CSS ellipsis truncation is sufficient.
@@ -661,7 +668,7 @@ Sheets-specific reinvention:
   wrap and no scrollbar. `max-width: 100%` is what actually makes the wrap
   trigger. (Same gotcha independently rediscovered and worth flagging if this
   pattern is ever generalized into the platform's own `docs/architecture-
-  rules.md` — not yet done, since that's a cross-cutting platform-repo change
+rules.md` — not yet done, since that's a cross-cutting platform-repo change
   outside this plugin's own scope.)
 - **Delete workbook moves into an overflow `⋮` menu** (`@sovereignfs/ui`'s
   `Menu`, `MenuEntry[]`, `destructive: true`), owner-only — mirrors Docs'
@@ -696,7 +703,7 @@ considered and rejected as a needless conflation, not an oversight.
 A direct follow-up to task 15's header redesign — same screen, four more
 concrete layout asks once that redesign was live: tighter page padding, the
 sheet-tab strip docked at the bottom of the viewport (Google Sheets' own
-convention, rather than sitting above the grid), and a second look at *which*
+convention, rather than sitting above the grid), and a second look at _which_
 actions belong in the header versus the toolbar directly above the grid, now
 that both existed as separate rows.
 
@@ -731,8 +738,8 @@ that both existed as separate rows.
   controls and Named ranges are now the first two groups in `SheetGrid.tsx`'s
   toolbar, each separated by a 1px `.divider` (ported from Docs'
   `RichTextEditor.module.css`'s own toolbar-group divider): `[Undo, Redo] |
-  [Named ranges] | [Format, Bold, Italic, Validation] | (spacer) | [Add
-  rows, Add columns]`. `canUndo`/`canRedo`/`onUndo`/`onRedo` and
+[Named ranges] | [Format, Bold, Italic, Validation] | (spacer) | [Add
+rows, Add columns]`. `canUndo`/`canRedo`/`onUndo`/`onRedo` and
   `namedRanges`/`onAddNamedRange`/`onRemoveNamedRange` are threaded down from
   `WorkbookView.tsx` as plain props — the underlying handlers
   (`handleUndo`/`handleRedo`/`handleAddNamedRange`/`handleRemoveNamedRange`)
@@ -757,7 +764,7 @@ that both existed as separate rows.
   `position: sticky; bottom: 0`, reasoning (correctly, as far as it went)
   that this page's `.view { height: 100% }` chain wasn't resolving to a real
   viewport-bounded height — confirmed live via `SheetGrid.module.css`'s
-  `.scroller` (meant to be the *only* internally-scrolling box) reporting
+  `.scroller` (meant to be the _only_ internally-scrolling box) reporting
   `scrollHeight === clientHeight` (no internal scrollbar at all) while
   `document.scrollingElement` was `<html>` and the whole document scrolled
   instead. That first attempt shipped believing the underlying gap was a
@@ -766,7 +773,7 @@ that both existed as separate rows.
   the box model) — **that belief was wrong**, caught immediately after by a
   direct follow-up ask to also keep the header/toolbar/column-letter row
   fixed while scrolling, which a bottom-anchored sticky tab strip alone could
-  never deliver (nothing was pinning the *top* chrome, and `.scroller`'s own
+  never deliver (nothing was pinning the _top_ chrome, and `.scroller`'s own
   `position: sticky; top: 0` column headers were scoped to `.scroller` as
   their sticky containing block, which was worthless while `.scroller` itself
   never actually scrolled). Revisiting the platform shell's own
@@ -775,7 +782,7 @@ that both existed as separate rows.
   internal layout (columns, scroll, flanking panes) marks its root with
   `[data-plugin-fullbleed]`," at which point the shell hard-locks itself to
   `100dvh` on desktop and gives the plugin's own content cell `overflow:
-  hidden`, letting `height: 100%` cascade correctly into the plugin instead
+hidden`, letting `height: 100%` cascade correctly into the plugin instead
   of the whole document growing to fit a 100-row sheet. Sheets' own `(home)`
   route group (`app/(home)/layout.tsx`) already opts into this for the
   Workbooks/Inbox list — the workbook editor route
@@ -784,7 +791,7 @@ that both existed as separate rows.
   `data-plugin-fullbleed` there was the one-line real fix: confirmed live
   afterward that `.scroller` now reports real internal scroll
   (`scrollHeight` 1648 vs. `clientHeight` 609 at 1280×800, `document
-  .scrollingElement`'s own `scrollHeight`/`clientHeight` now equal, i.e. the
+.scrollingElement`'s own `scrollHeight`/`clientHeight` now equal, i.e. the
   page itself no longer scrolls at all) — and with a real bounded height in
   place, `.colHeader`/`.cornerHeader`'s existing `position: sticky; top: 0`
   (unchanged, already present since the MVP) started working exactly as
@@ -818,7 +825,7 @@ two menu-triggered buttons, `Export ▾` and `Import ▾`
 for the header's overflow `⋮`):
 
 - **Export ▾** — "Export as CSV" (current sheet only, `Icon:
-  file-text`) and "Export as JSON" (whole workbook, lossless, `Icon: file`).
+file-text`) and "Export as JSON" (whole workbook, lossless, `Icon: file`).
   Available to any role, unchanged from before — both are read operations.
 - **Import ▾** — "Import CSV" (replaces the current sheet, same confirm
   dialog as before) and "Import as JSON (new workbook)" (parses/validates a
@@ -864,7 +871,7 @@ the same slot the "View only" badge (shown to viewers) already occupied.
 The two are mutually exclusive by role (`!canEdit` shows "View only",
 `canEdit` shows the live autosave status) and were already rendered as
 siblings of the `<h1>` before this change for the viewer case, so no new
-CSS was needed. Reasoning: both describe the state of the *document itself*
+CSS was needed. Reasoning: both describe the state of the _document itself_
 (read-only vs. editable, saved vs. not), not a command a user issues, so
 they read more naturally as a caption next to the title — the same pattern
 Docs' own `DocumentPage.module.css` `.statusLine` already uses (inline,
@@ -963,7 +970,7 @@ fix for relying on implicit source order for an override in the first place.
 second, more serious bug found while re-verifying the fix above: task 19's
 `SheetGrid.module.css` `.grid` table had `table-layout: fixed` and a
 `<colgroup>` but no explicit `width`, so the table's own box underwent
-ordinary shrink-to-fit sizing — capped at `.scroller`'s *available* width
+ordinary shrink-to-fit sizing — capped at `.scroller`'s _available_ width
 rather than growing to the sum of the `<colgroup>`'s column widths. On any
 sheet wide enough to need `.scroller`'s horizontal scroll (i.e. virtually
 every default-sized sheet, 20 columns), every column silently rendered
@@ -975,7 +982,7 @@ its own content (the `<colgroup>` widths) instead of the container's
 available space, letting `.scroller`'s existing `overflow: auto` do the
 scrolling. This bug shipped with task 19 and had gone unnoticed through that
 task's own live verification, since every check there happened to compare
-*relative* width differences (resized vs. unresized column, both
+_relative_ width differences (resized vs. unresized column, both
 proportionally shrunk together) rather than an absolute pixel value against
 the requested width.
 
@@ -1008,7 +1015,7 @@ color-input firing `onChange` more than once mid-pick; task 27 changed
 this — see "Color picker auto-close on selection" below.
 
 **Curated palette** (`_lib/cell-colors.ts`, `CELL_COLOR_SWATCHES`, shared by
-both pickers): colors are plugin *data*, not design tokens — same pattern
+both pickers): colors are plugin _data_, not design tokens — same pattern
 `plugins/sovereign-plugin-kanban.local/app/_lib/palette.ts` already
 establishes for board colors, since the design system itself is
 deliberately monochrome. Deliberately excludes black/white/gray-scale
@@ -1079,7 +1086,7 @@ keys, or (unchanged) a plain click/arrow for a single cell.
 
 - **Bulk formatting** — Bold/Italic/Font color/Fill color/number format,
   applied to every cell in the current selection at once (a selection of 1
-  behaves exactly as before this task). Bold/Italic are a *uniform* toggle,
+  behaves exactly as before this task). Bold/Italic are a _uniform_ toggle,
   not per-cell independent: if every selected cell already has the flag on,
   the click turns it off for all of them; otherwise it turns it on for all
   of them (`WorkbookView.tsx`'s `handleToggleStyle`). Font/fill color always
@@ -1096,7 +1103,7 @@ keys, or (unchanged) a plain click/arrow for a single cell.
   top-left corner, and gets re-anchored at the paste target
   (`SheetGrid.tsx`'s `handleCopyOrCut`/`handlePaste`,
   `WorkbookView.tsx`'s new `onApplyMetadataPatch` prop). A cut additionally
-  clears the *source* range's metadata once pasted, mirroring how
+  clears the _source_ range's metadata once pasted, mirroring how
   `engine.paste()` already moves (not duplicates) the underlying values.
   Always whole-cell/range semantics, even when the focused `<input>` has
   its own native text selection — copying "this cell" is the primary
@@ -1105,7 +1112,7 @@ keys, or (unchanged) a plain click/arrow for a single cell.
   clipboard integration (no paste from/to Excel or a text file); tracked as
   a possible follow-up, not attempted here.
 - **Bulk clear** — Delete/Backspace over a multi-cell selection clears
-  every selected cell's *value*, not its formatting, matching Excel/Sheets
+  every selected cell's _value_, not its formatting, matching Excel/Sheets
   (formatting survives until explicitly cleared). A single-cell selection's
   Backspace/Delete is untouched, native in-`<input>` text editing.
 
@@ -1146,7 +1153,7 @@ switching to a genuine OS-level drag (the `computer` tool's
 selection, highlight, and formula-bar range label all worked correctly on
 the first try. Every other synthetic-event interaction used to verify this
 task (`Ctrl+C`/`X`/`V`, `Shift`+`Arrow`, `Delete`) dispatches `KeyboardEvent`s,
-which React *does* listen for via a native `keydown` handler — those all
+which React _does_ listen for via a native `keydown` handler — those all
 worked as plain synthetic dispatches with no such gap. (Cells were literal
 always-editable `<input>` elements at the time this task shipped — task 24
 below changed that; the drag-select mechanics described here are
@@ -1226,7 +1233,7 @@ every other optional `CellStyle` field.
 format `Select` and the Bold button — options are a curated list of px sizes
 (`_lib/font-sizes.ts`'s `CELL_FONT_SIZES`: 10/12/14/16/18/20/24/28/32/36/48)
 plus a `"Default"` option that clears the override. Like task 21's colors,
-these are plugin *data*, not a `--sv-*` design-system scale — a value a user
+these are plugin _data_, not a `--sv-*` design-system scale — a value a user
 picks for their own cell content, not a token this plugin's own chrome is
 built from.
 
@@ -1257,7 +1264,7 @@ Verified live end-to-end: single click selects without entering edit mode;
 double-click enters edit mode; Escape while editing reverts to the pre-edit
 value; typing directly on a selected empty cell replaces its content and
 enters edit mode in one step; F2 enters edit mode preserving existing raw
-content (confirmed showing the *raw* formula/value, not the formatted
+content (confirmed showing the _raw_ formula/value, not the formatted
 display string); Delete on a single selected non-editing cell clears its
 value without entering edit mode; the font-size `Select` applies a chosen
 size (visually confirmed via a noticeably larger rendered value and the row
@@ -1338,14 +1345,14 @@ hardcoded per-icon list), so no story file needed updating; confirmed via
 **A dev-environment false alarm, not a code bug, cost the bulk of this
 task's verification time.** After implementing and passing every static
 check (typecheck/lint/format/design-tokens), the live-verification browser
-kept rendering the *old* toolbar — plain "B"/"/" text, no icons — across a
+kept rendering the _old_ toolbar — plain "B"/"/" text, no icons — across a
 forced reload and even a brand-new browser tab, with zero console errors.
 Root-caused by directly diffing the served JS/CSS bundles (fetched with
 `cache: 'no-store'`) against the edited source: the compiled route's CSS
 had the new class names (`toolbarIconButtonActive`, `fillTriggerBar`)
 entirely absent, while an unrelated `packages/ui` change (the new Lucide
 icon files, watched normally by Next's own compiler since `packages/ui` is
-in `transpilePackages`) *did* show up fresh — proving the gap was specific
+in `transpilePackages`) _did_ show up fresh — proving the gap was specific
 to this plugin's own source, not a browser cache or a real compile error.
 Traced to the dev-DX mechanism documented in this plugin's own `CLAUDE.md`
 ("Plugin changes → HMR via re-copy... Plugins are copies, not symlinks —
@@ -1373,7 +1380,7 @@ controls.
 ## Font color default swatch fix (post-MVP, task 26)
 
 Direct follow-up, reported right after task 25 shipped: the Font color
-bar's *default* (unset) state rendered as `'transparent'` — the same
+bar's _default_ (unset) state rendered as `'transparent'` — the same
 "no color" treatment Fill color legitimately uses when there's genuinely
 no fill applied. But font color is never actually invisible; unset always
 resolves to a real, visible color, `--sv-color-text-primary` (black in
@@ -1388,7 +1395,7 @@ a live CSS variable reference, not a hardcoded `#000`, so it automatically
 tracks light/dark mode and any future instance theming exactly like every
 other semantic color consumer in this app, with no theme-awareness logic
 of its own needed. Fill color's bar is intentionally unchanged (still
-`'transparent'` for unset) — that one *is* correctly representing
+`'transparent'` for unset) — that one _is_ correctly representing
 "nothing," unlike font color, which always renders in some color.
 
 Verified live: the bar renders solid black by default, matching the
@@ -1484,10 +1491,10 @@ two items call `.open()` / `.triggerImport()` on them.
 
 **A real bug found during live verification, not anticipated during
 implementation**: the `Menu`'s panel defaulted to `align="right"`
-(`Popover`'s own default — panel's *right* edge aligns to the trigger's
+(`Popover`'s own default — panel's _right_ edge aligns to the trigger's
 right edge, extending leftward) — fine for the header's Export/Import
 menus, which sit near the right edge of a wide header with room to their
-left, but the ghost tile sits at the *left* edge of the grid, right after
+left, but the ghost tile sits at the _left_ edge of the grid, right after
 the sidebar, so a leftward-extending panel overflowed off-screen, its text
 literally cut off mid-word in a screenshot. Fixed with `align="left"`
 (panel's left edge aligns to the trigger's left edge, extending
@@ -1535,14 +1542,14 @@ measuring computed layout live rather than guessing: `NewCardTile`'s
 `variant="icon"` styling (`.newTileIcon`, `packages/ui`'s
 `CardTile.module.css`) sized itself with `width: auto; height: auto`,
 relying entirely on the CSS Grid parent's own item-stretch to reach the
-cell's full footprint — which only reaches a component that is a *direct*
+cell's full footprint — which only reaches a component that is a _direct_
 grid child. Wrapping the tile as a `Menu`'s `trigger` (task 28) inserts
 `Popover`'s own `display: inline-flex` container between the grid and the
 button; that intermediate flex box's cross-axis stretch correctly
-sized the button's *height* (confirmed: `inline-flex`'s default
+sized the button's _height_ (confirmed: `inline-flex`'s default
 `align-items: stretch` did stretch it to 106px), but flex does not
-stretch a child along its *main* axis without an explicit `flex-grow` or
-width rule, so the button's *width* fell back to shrink-to-fit its own
+stretch a child along its _main_ axis without an explicit `flex-grow` or
+width rule, so the button's _width_ fell back to shrink-to-fit its own
 icon + padding (~38px) — silently wrong even though the outer `Popover`
 container itself measured the correct 160px, since nothing propagated
 that width down to the actual visible button one level inside it.
@@ -1553,7 +1560,7 @@ anything Sheets-specific — any future consumer wrapping it in a
 `.newTileIcon` from `width: auto; height: auto` to explicit
 `width: 100%; height: 100%`. A percentage resolves against whichever
 immediate parent box is already correctly sized to the grid cell —
-`Popover`'s intermediate container once *it* has been grid-stretched, or
+`Popover`'s intermediate container once _it_ has been grid-stretched, or
 the grid track directly for a consumer using `NewCardTile` with no
 wrapper at all — so this works for both cases, unlike depending on
 implicit stretch propagating through an arbitrary number of intermediate
@@ -1668,7 +1675,7 @@ has —
 
 - `app/_db/schema.postgres.ts`: a `pgTable`-based structural mirror of
   `app/_db/schema.ts`. Exists only to drive `drizzle-kit generate --dialect
-  postgresql`, which cannot read a `sqliteTable()`-based schema file
+postgresql`, which cannot read a `sqliteTable()`-based schema file
   directly (`docs/plugin-database.md`); application code never imports it.
 - `drizzle.config.pg.ts` + a new `db:generate:pg` package.json script,
   identical in shape to every sibling plugin's own.
@@ -1756,6 +1763,16 @@ workbook can be created/opened.
   flow. No `activity:write` — no `sdk.activity.log()` calls exist. No
   invented permission for a settings gate — none needed since `FINANCE()`
   requires no secret.
+- **Account deletion** (`sdk.portability.provideDelete()`, `app/_lib/portability.ts`)
+  needs no permission of its own (unlike export/import). A workbook the
+  deleting user doesn't own just loses their `workbook_members` row; one
+  they do own transfers to another member (an existing `owner`-role member
+  preferred, else the earliest-joined) so it survives; only a workbook with
+  no member left at all is hard-deleted, along with its sheets. No nested
+  ownership case to handle here — a `sheets` row has no owner column of its
+  own, so a workbook's membership set is the only thing with a stake in its
+  contents (contrast Docs' folder/document split, where a document's owner
+  can differ from its containing folder's).
 - No `database` field in the manifest — the per-plugin `isolation`/`dialect`
   overrides were both retired platform-wide; every sovereign/community plugin
   is now unconditionally isolated, with dialect set instance-wide via

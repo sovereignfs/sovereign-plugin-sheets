@@ -42,13 +42,13 @@ Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
 ## Identity
 
-| Property     | Value                          |
-| ------------- | ------------------------------ |
-| Plugin ID     | `fs.sovereign.sheets`          |
-| Route prefix  | `/sheets`                      |
-| Database      | `isolated` — own SQLite file, no slug-prefix required |
-| Permissions   | `auth:session`, `db:readWrite`, `notifications:send` |
-| Min platform  | `0.42.0`                       |
+| Property     | Value                                                 |
+| ------------ | ----------------------------------------------------- |
+| Plugin ID    | `fs.sovereign.sheets`                                 |
+| Route prefix | `/sheets`                                             |
+| Database     | `isolated` — own SQLite file, no slug-prefix required |
+| Permissions  | `auth:session`, `db:readWrite`, `notifications:send`  |
+| Min platform | `0.42.0`                                              |
 
 ## MVP scope discipline
 
@@ -69,27 +69,27 @@ SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/"Named
 ranges"/"Cell styling and data validation"/"Full-workbook JSON
 export/import"/"Cell font and background color"/"Multi-cell selection"/
 "Click to select, double-click to edit"/"Cell font size" sections are the
-design records. Sharing is still *workbook-level*
+design records. Sharing is still _workbook-level_
 only (no per-sheet sharing, no real-time multiplayer/presence/comments —
-those stay out per the bullet above); CSV import is still *single-sheet,
-full-replace* only (no full-workbook import, no XLSX, no
-merge-with-existing-data mode); cell formatting is still *the number-format
-enum, bold/italic, font/background color, and font size* (no conditional
+those stay out per the bullet above); CSV import is still _single-sheet,
+full-replace_ only (no full-workbook import, no XLSX, no
+merge-with-existing-data mode); cell formatting is still _the number-format
+enum, bold/italic, font/background color, and font size_ (no conditional
 formatting — task 9 shipped the format enum, task 11 added bold/italic,
 task 21 added color, task 24 added font size, still a thinner slice of
 "richer cell formatting / conditional formatting" than the full phrase
-implies); named ranges is *just names →
-formula/reference*; data validation (task 11) is *per-cell soft validation
-only* — a number-range or list rule that renders a visual indicator, never
+implies); named ranges is _just names →
+formula/reference_; data validation (task 11) is _per-cell soft validation
+only_ — a number-range or list rule that renders a visual indicator, never
 blocks a commit, and has no range-based/multi-cell or custom-formula rule
 support (task 23's selection model didn't change this — validation stays
 single-cell, a deliberate scope line, not an oversight); full-workbook
-export/import (task 13) is a *native JSON backup/restore format only* —
+export/import (task 13) is a _native JSON backup/restore format only_ —
 lossless within Sheets (formulas, styling, validation, named ranges all
 round-trip), but not an XLSX/Excel-interoperable file, and import only ever
 creates a **new** workbook, never an in-place merge/overwrite; multi-cell
 selection (task 23) is copy/cut/paste, bulk formatting, and bulk clear
-*within this app only* — no OS clipboard integration (no paste from/to
+_within this app only_ — no OS clipboard integration (no paste from/to
 Excel or a text file), and no range-based conditional formatting (still
 tracked separately, see "Post-MVP" below); the click-to-select/
 double-click-to-edit model (task 24) matches Google Sheets/Docs' basic
@@ -134,7 +134,7 @@ keyed on `(base, quote)`, **instance-wide** — not tenant/user-scoped, since
 exchange rates are public data (same rationale as the Ledger plugin's
 untenanted `ledger_fx_rates` cache, `plugins/sovereign-ledger.local` in the
 platform monorepo) — and `workbook_members` (task 6), the workbook-sharing
-access-control table, which *is* tenant/user-scoped per row (see SPEC.md's
+access-control table, which _is_ tenant/user-scoped per row (see SPEC.md's
 "Workbook sharing").
 
 ## SDK-only rule
@@ -156,7 +156,7 @@ import { getPlatformDb } from '@sovereignfs/db';
 
 `hyperformula` (dependency since task 3) ships its free tier under **GPLv3**.
 This plugin is licensed AGPL-3.0-or-later, and the user has confirmed that's
-fine for *this plugin's own* distribution. Whether a GPLv3 dependency in one
+fine for _this plugin's own_ distribution. Whether a GPLv3 dependency in one
 `type: sovereign` plugin imposes any obligation on the core Sovereign
 platform or on other plugins with different licenses is still flagged in
 SPEC.md as needing real legal confirmation, not just this repo's own
@@ -171,7 +171,40 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.17.2** — fix: missing Postgres migrations, a critical
+Current version: **0.18.0** — feat: account deletion handler
+(`sdk.portability.provideDelete()`), task 31. Found via a cross-plugin
+platform research survey (research doc 0020 in the platform monorepo,
+prompted by the sibling Tally plugin's own joint-data deletion concerns):
+Sheets has a real owner/collaborator model (`workbooks`/`workbook_members`)
+but registered no deletion handler at all, so a deleted user's workbooks and
+shares were silently left in place — protected only by the platform's
+default "leave unregistered plugins' rows alone" fallback, not by design.
+New `app/_lib/portability.ts` mirrors the Docs plugin's `deleteAllDocsData`
+one level simpler: a workbook the deleting user doesn't own just loses
+their `workbook_members` row; one they do own transfers to another member
+(an existing `owner`-role member preferred, else earliest-joined); a
+workbook with no member left at all is hard-deleted along with its sheets,
+in explicit FK order (`sheets` → `workbook_members` → `workbooks` — neither
+schema dialect defines a cascade). No manifest permission change needed —
+unlike `provideExport`/`provideImport`, `provideDelete` is ungated. No
+nested-ownership branch was needed either (unlike Docs' folder/document
+split, where a document's owner can differ from its folder's): a `sheets`
+row has no owner column of its own, so a workbook's membership set is the
+only thing that can ever have a stake in its contents — confirmed by
+reading `schema.ts`'s own docblock ("access control lives entirely
+[in `workbook_members`]") before designing the handler, not assumed. Wired
+into `app/layout.tsx`'s existing pass-through layout in a best-effort
+`try/catch`, matching the in-process-registration reset-on-restart caveat
+every other portability hook in this codebase already lives with. Also
+bootstraps this plugin's first test infrastructure — `vitest`,
+`vitest.config.ts`, a `test` script, none of which existed before this task
+— using Docs' own `portability.test.ts` hand-rolled `fakeDb`/condition-tree
+mocking convention as the direct template, verified with 4 new tests
+(ownership transfer with a successor, hard-delete with no successor,
+owner-role-over-earlier-joined-member promotion precedence, and a dangling
+membership-row cleanup case) plus a clean `pnpm typecheck`.
+
+(Previous version: 0.17.2 — fix: missing Postgres migrations, a critical
 production bug found immediately after tasks 12–29 (this plugin's own
 `migrations/sqlite/` history) shipped and deployed to a real Postgres-backed
 instance for the first time. `migrations/postgres/` had never existed for
@@ -242,7 +275,7 @@ layout (`getBoundingClientRect()`) rather than guessing: `NewCardTile`'s
 `variant="icon"` CSS (`.newTileIcon`, `packages/ui`'s
 `CardTile.module.css`) used `width: auto; height: auto`, relying on the
 CSS Grid parent's item-stretch to reach the tile's full footprint — which
-only works for a *direct* grid child. Task 28 wrapped the tile as a
+only works for a _direct_ grid child. Task 28 wrapped the tile as a
 `Menu`'s trigger, which inserts `Popover`'s own `display: inline-flex`
 container between the grid and the button; that flex box's cross-axis
 stretch correctly sized the button's height (`inline-flex`'s default
@@ -403,14 +436,14 @@ a tighter row matching Google Sheets' own icon-button spacing; `Popover`'s
 
 **A dev-environment false alarm consumed most of task 25's time, not a
 code bug.** After every static check passed, the live-verification browser
-kept showing the *old* toolbar (plain text, no icons) across a forced
+kept showing the _old_ toolbar (plain text, no icons) across a forced
 reload and a brand-new tab, with zero console errors — misleading at
 first, since it looked exactly like the kind of stale-bundle issue a hard
 reload normally fixes. Root-caused by diffing the served bundles (fetched
 with `cache: 'no-store'`, ruling out browser caching) against the edited
 source: the compiled CSS was missing the new class names entirely, while
 an unrelated `packages/ui` change (the new icon files, which Next watches
-directly since `packages/ui` is in `transpilePackages`) *did* compile
+directly since `packages/ui` is in `transpilePackages`) _did_ compile
 fresh — isolating the gap to this plugin's own source specifically. Traced
 to this file's own documented dev-DX mechanism: "Plugin changes → HMR via
 re-copy... Next's dev watcher does not follow symlinks" — the `next dev`
