@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "fs.sovereign.sheets",
   "name": "Sheets",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "A lightweight spreadsheet with formulas and a built-in currency conversion function.",
   "type": "sovereign",
   "runtime": "native",
