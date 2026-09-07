@@ -2,7 +2,7 @@
 
 A lightweight, self-hostable spreadsheet for [Sovereign](https://github.com/sovereignfs/sovereign), with a built-in currency conversion function.
 
-**Status:** v0.17.2 — MVP complete, workbook sharing + CSV import + cell number formatting + named ranges + cell styling/data validation + full-workbook JSON export/import + manual sheet growth + workbook editor header redesign + layout consolidation/bottom-docked sheet tabs + export/import menu consolidation + status badge placement + resizable columns + cell font/background color + multi-cell selection (range formatting, copy/cut/paste, bulk clear) + click-to-select/double-click-to-edit + cell font size + a ghost "add" tile on the Home page added, formula bar/column-width fixes, cell color visibility fixes, toolbar icon polish, font color default swatch fix, color picker auto-close on selection, Home page spacing fix, ghost tile position/sizing fix, **critical fix: missing Postgres migrations** (see [ROADMAP.md](ROADMAP.md))
+**Status:** v0.19.0 — MVP complete plus every post-MVP task through 32 (workbook sharing, CSV and JSON import/export, cell formatting, named ranges, validation, multi-cell selection, and the task-32 hardening/editor overhaul — see [ROADMAP.md](ROADMAP.md))
 **Plugin ID:** `fs.sovereign.sheets`
 **Route:** `/sheets`
 
@@ -32,7 +32,15 @@ same as Excel/Sheets), or clear a whole range at once — see SPEC.md's
 double-click (or F2) enters edit mode, matching Google Sheets/Docs — see
 SPEC.md's "Click to select, double-click to edit" section. Cells also
 support a per-cell font size, alongside bold/italic/color — see SPEC.md's
-"Cell font size" section.
+"Cell font size" section. Task 32 added the rest of the everyday editing
+toolkit: copy/paste to and from Excel/Google Sheets/plain text, an autofill
+handle, insert/delete rows and columns, sort by column, frozen panes, find
+and replace, alignment, percent and per-currency number formats, list
+validation dropdowns, workbook rename, a Recently deleted section with
+restore, and a virtualized grid that stays fast at the 2000×100 size cap.
+Saves are revision-checked, so two editors on one sheet get a conflict
+notice instead of overwriting each other — see SPEC.md's "Hardening and
+editor overhaul" section.
 
 See [SPEC.md](SPEC.md) for the full functional requirements and data model,
 and [ROADMAP.md](ROADMAP.md) for the proposed build order.
@@ -71,7 +79,7 @@ full workflow.
 
 ## Requirements
 
-- Sovereign platform ≥ `0.42.0`
+- Sovereign platform ≥ `0.98.1`
 - Node ≥ 20
 - pnpm 11.5.x (platform monorepo convention)
 

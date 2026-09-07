@@ -1734,6 +1734,135 @@ picks this up on the next container recreate once the image includes
 manually against a rebuilt image, then confirming `/sheets` loads and a
 workbook can be created/opened.
 
+## Hardening and editor overhaul (task 32)
+
+A single review pass over the whole plugin (28 findings: bugs, robustness
+gaps, and missing table-stakes editing features) addressed together, since
+most of the fixes share one refactor — the grid became a *view* over a
+`SheetOps` interface (`app/_lib/sheet-ops.ts`) implemented by
+`WorkbookView`, which owns the formula engine, the per-sheet metadata and
+width maps, and a single save queue.
+
+### Persistence and concurrency
+
+- **One save path per sheet.** `saveSheetAction` writes cells, size, column
+  widths and frozen panes as one row update, replacing the separate
+  cells/size/widths actions. Every field is re-validated server-side:
+  sizes clamp into `[1, MAX_ROW_COUNT]` × `[1, MAX_COL_COUNT]`, the cells
+  blob is size-capped (`MAX_CELLS_JSON_BYTES`) and run through the same
+  field-by-field sanitizer import uses (`_lib/cells.ts`'s
+  `sanitizeCellData`: recognised keys only, hex colours, curated font
+  sizes, bounded validation lists, A1 keys only), widths clamp, named
+  ranges are shape-checked (`_lib/named-ranges.ts`).
+- **Optimistic concurrency.** New `sheets.revision` column (a fresh id per
+  save, both dialects, migration `0005`/`0001`). A save carries the
+  revision the client loaded; a mismatch is refused as a conflict and
+  surfaced as a banner ("changed by someone else… export a copy, then
+  reload") — never a silent overwrite. The client runs at most one save
+  per sheet in flight and coalesces edits landing mid-flight.
+- **Access loss is visible.** Mutations return `ActionResult` (with
+  `denied: true` for a lost role or a deleted workbook —
+  `resolveWorkbookRole` now joins `workbooks` and treats a soft-deleted
+  workbook as no access). The editor shows a "Not saved" badge plus a
+  banner with Reload instead of a false "Saved".
+- **Unsaved-changes guard**: `beforeunload` prompt while a save is pending
+  or in flight; pending saves flush on client-side navigation.
+- **Remote changes**: the editor polls `getWorkbookSnapshotAction` every
+  `WORKBOOK_REFRESH_POLL_MS` and, comparing field-by-field against its own
+  known revisions (so its own saves never count), reloads via
+  `WorkbookEditor` when someone else changed the workbook and nothing
+  local is unsaved. Viewers therefore see edits without a manual refresh.
+- `workbooks.updatedAt` is bumped by every content change (`touchWorkbook`)
+  so Home's "last updated" order is honest; `activeSheetId` is now
+  actually passed to the editor and only editors persist it (a viewer's
+  tab choice stays local). The sidebar's Recent list updates via
+  `recordWorkbookOpenedAction` (a client-triggered action that also
+  revalidates the `/sheets` layout) — `getWorkbook` is a pure read again.
+
+### Editing model
+
+- **Draft-on-commit.** A cell in edit mode holds a local draft; the engine
+  is written on Enter/Tab/blur/arrow-out. One edit = one undo step and one
+  recalculation; dependents no longer flash `#ERROR!` mid-formula; Escape
+  discards without touching history.
+- **Formula bar** commits to the cell it was opened on (captured on
+  focus), not whatever cell a click just activated. It shows the FINANCE
+  rate's reference date as a hint.
+- **Undo/redo** are engine-level (values). Structural changes — sheet
+  add/rename/delete, row/column insert/delete, sort, CSV import — clear
+  the stacks, since they touch state the engine doesn't own.
+- **Clipboard interop.** Copy puts tab-separated text on the OS clipboard
+  and keeps the engine-internal clipboard; paste of our own text uses the
+  internal one (formulas, translated references, formatting), anything
+  else is parsed as TSV/lines from Excel, Google Sheets, or plain text.
+  Paste inside an edit is native. Cut across sheets clears formatting on
+  the *source* sheet.
+- **Keyboard**: Ctrl+Z/Y/Shift+Z, Ctrl+B/I, Ctrl+A, Ctrl+F, Ctrl+D (fills
+  the selection from its top row, or from the cell above), Home/End,
+  Ctrl+Home/End, Ctrl+Arrow, PageUp/Down, Ctrl+PageUp/Down (switch
+  sheet), Tab/Shift+Tab (leave the grid at the edges — the grid is a
+  roving-tabindex composite, one tab stop). Sheet tabs get arrow-key
+  navigation and F2 to rename.
+
+### Grid
+
+- **Row virtualization.** Only the visible band (plus overscan) is
+  mounted; row heights are computed from cell font sizes
+  (`rowHeightForFontSize`) so positions are arithmetic. The CSS contract
+  (`border-collapse: separate`, borders drawn as inset shadows on the
+  input, no cell padding) keeps DOM row pitch equal to the computed
+  height. A sheet at the 2000×100 cap renders as cheaply as a small one.
+- **Frozen panes** (`sheets.frozen_rows`/`frozen_cols`, up to 5 each) via
+  sticky cells; **row/column header selection**; a **context menu** (DS
+  `ContextMenu`) on cells and headers with cut/copy/paste, insert/delete
+  rows/columns, sort, clear; an **Insert** menu and a **View** menu in the
+  toolbar; **autofill handle** (drag the selection's corner —
+  `engine.getFillRangeData` translates references; formatting repeats);
+  **sort by column** (`setRowOrder`, keeping a text header row put);
+  **find and replace** (`FindReplacePopover`); **text alignment**
+  (auto = numbers right, text left); **percent** format and a
+  **per-cell currency code** (`Intl` formatting, `en-US` locale pinned so
+  server and client render identically).
+- **Validation** applies to the whole selection; a list rule gets an
+  in-cell dropdown; min > max is rejected inline.
+- CSV import strips a UTF-8 BOM and the confirm/toast copy says what it
+  does; CSV export writes unformatted values so numbers survive a round
+  trip.
+
+### Workbook and sharing
+
+- **Rename workbook** in place (title/pencil, `renameWorkbookAction`).
+- **Recently deleted** on Home: a deleted workbook is soft-deleted and
+  its owner can restore it or delete it permanently
+  (`restoreWorkbookAction`/`purgeWorkbookAction`).
+- **Share dialog**: an inline role picker per member
+  (`updateWorkbookMemberRole`), "(you)" with Leave instead of Remove,
+  notifications name who shared and what changed.
+
+### Robustness
+
+- `getFinanceRatesAction` requires a session, validates currency codes,
+  caps the pair count; the Frankfurter fetch has a timeout. FINANCE()
+  discovers pairs from its own calls (`pendingPairs`), so
+  `=FINANCE(A1,B1)` and named ranges resolve, not only string literals.
+- Import dedupes sheet names case-insensitively (the engine's own rule) so
+  an edited file can't produce a workbook that throws on load; sheet
+  rename/add validate the same way (`_lib/sheet-names.ts`).
+- `app/error.tsx` (plugin-scoped boundary), `loading.tsx` on the workbook
+  route, and an in-page error state when stored content can't be loaded.
+- Server-side `revalidatePath` calls on per-sheet actions are gone — the
+  client owns that state, and each one refetched every sheet's blob.
+
+### Not done here (documented rather than changed)
+
+- The migration-time SQL defaults for `row_count`/`col_count` (200/26)
+  differ from `DEFAULT_ROW_COUNT`/`DEFAULT_COL_COUNT` (100/20); every
+  insert sets both explicitly, and changing a SQLite column default means
+  a full table rebuild, so the schema now documents the divergence instead.
+- Column virtualization (rows only; 100 columns is the cap).
+- `minPlatformVersion` corrected to `0.98.1` — the first platform release
+  carrying `ColorPicker`'s `onSelectionComplete`, which the toolbar uses.
+
 ## Manifest & permissions
 
 ```json
@@ -1750,7 +1879,7 @@ workbook can be created/opened.
   "icon": "icon.svg",
   "permissions": ["auth:session", "db:readWrite", "notifications:send"],
   "repository": "https://github.com/sovereignfs/sovereign-plugin-sheets",
-  "compatibility": { "minPlatformVersion": "0.42.0" }
+  "compatibility": { "minPlatformVersion": "0.98.1" }
 }
 ```
 
@@ -1822,7 +1951,9 @@ generation, `_lib/ids.ts` — same convention as the Docs plugin's own),
   `FxRateProvider` abstraction is currency-conversion-only by design, not a
   general quote interface — this still needs its own design pass, not just
   a second implementation of that interface.
-- Real-time multiplayer editing, presence, comments.
+- Real-time multiplayer editing, presence, comments. (Task 32 added
+  optimistic concurrency and a change poll — conflicts are detected and
+  viewers refresh, but there is still no live merge.)
 - Charts, pivot tables. (Named ranges shipped, task 10; data validation
   shipped, task 11 — per-cell range/list rules only, see "Cell styling and
   data validation" above.)
@@ -1836,3 +1967,7 @@ generation, `_lib/ids.ts` — same convention as the Docs plugin's own),
 - XLSX import/export (either direction) — deliberately not attempted by
   task 13's native JSON export/import; see "Full-workbook JSON
   export/import" above for the cost/fidelity tradeoffs that decided it.
+- Filter views, text wrapping, cell borders, merged cells, column
+  virtualization, function autocomplete in the formula bar — task 32
+  shipped sort, alignment, freeze panes, find/replace and autofill; these
+  are the next slice.

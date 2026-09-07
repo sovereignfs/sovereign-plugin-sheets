@@ -6,6 +6,8 @@ import {
 } from './config';
 import { parseCellsJson, serializeCellsJson } from './cells';
 import { parseColumnWidthsJson, serializeColumnWidthsJson } from './column-widths';
+import { parseNamedRangesJson } from './named-ranges';
+import { uniqueSheetName } from './sheet-names';
 
 export const WORKBOOK_EXPORT_FORMAT_VERSION = 1;
 
@@ -16,6 +18,8 @@ export interface WorkbookExportSheet {
   colCount: number;
   cellsJson: string;
   colWidthsJson: string;
+  frozenRows: number;
+  frozenCols: number;
 }
 
 export interface WorkbookExportWorkbook {
@@ -48,23 +52,15 @@ export function downloadWorkbookExport(filename: string, payload: WorkbookExport
   URL.revokeObjectURL(url);
 }
 
-function sanitizeNamedRangesJson(raw: string): string {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '{}';
-    const clean: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value === 'string') clean[key] = value;
-    }
-    return JSON.stringify(clean);
-  } catch {
-    return '{}';
-  }
-}
-
 export type WorkbookExportParseResult =
   | { ok: true; payload: WorkbookExportPayload }
   | { ok: false; error: string };
+
+function clampFrozen(raw: unknown, max: number): number {
+  const n = typeof raw === 'number' ? Math.floor(raw) : 0;
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(n, max);
+}
 
 /**
  * Validates, caps, and normalizes an uploaded export file's shape — used
@@ -76,6 +72,11 @@ export type WorkbookExportParseResult =
  * check. Every cap (sheet count, row/col count per sheet) lives here rather
  * than split between this function and the action, so both call sites agree
  * by construction instead of by convention.
+ *
+ * Sheet names are made unique the same way the formula engine requires
+ * (case-insensitively) — an exported file edited by hand, or written by an
+ * older build, could otherwise produce a workbook that throws on load and
+ * can never be opened.
  */
 export function parseWorkbookExportPayload(text: string): WorkbookExportParseResult {
   if (text.length > MAX_IMPORT_FILE_SIZE_BYTES) {
@@ -111,24 +112,29 @@ export function parseWorkbookExportPayload(text: string): WorkbookExportParseRes
   }
 
   const sheets: WorkbookExportSheet[] = [];
+  const takenNames: string[] = [];
   for (const [index, entry] of workbookRecord.sheets.entries()) {
     if (!entry || typeof entry !== 'object') {
       return { ok: false, error: 'Not a valid Sheets export file.' };
     }
     const sheetRecord = entry as Record<string, unknown>;
-    const rowCount = Number(sheetRecord.rowCount);
-    const colCount = Number(sheetRecord.colCount);
+    const rowCount = Math.floor(Number(sheetRecord.rowCount));
+    const colCount = Math.floor(Number(sheetRecord.colCount));
     if (!Number.isFinite(rowCount) || !Number.isFinite(colCount) || rowCount < 1 || colCount < 1) {
       return { ok: false, error: 'Not a valid Sheets export file.' };
     }
-    const sheetName =
-      typeof sheetRecord.name === 'string' && sheetRecord.name ? sheetRecord.name : `Sheet${String(index + 1)}`;
+    const requestedName =
+      typeof sheetRecord.name === 'string' && sheetRecord.name.trim()
+        ? sheetRecord.name
+        : `Sheet${String(index + 1)}`;
     if (rowCount > MAX_ROW_COUNT || colCount > MAX_COL_COUNT) {
       return {
         ok: false,
-        error: `"${sheetName}" is too large to import (max ${String(MAX_ROW_COUNT)} rows × ${String(MAX_COL_COUNT)} columns).`,
+        error: `"${requestedName}" is too large to import (max ${String(MAX_ROW_COUNT)} rows × ${String(MAX_COL_COUNT)} columns).`,
       };
     }
+    const sheetName = uniqueSheetName(requestedName, takenNames);
+    takenNames.push(sheetName);
     sheets.push({
       name: sheetName,
       position: index,
@@ -136,8 +142,8 @@ export function parseWorkbookExportPayload(text: string): WorkbookExportParseRes
       colCount,
       // Round-trips through the same parse/serialize pair `cellsJson` is
       // always stored through — drops anything that isn't a recognized
-      // v/f/fmt/style/validation field, so a hand-edited or malicious file
-      // can't smuggle unexpected keys into storage.
+      // field, so a hand-edited or malicious file can't smuggle unexpected
+      // keys into storage.
       cellsJson: serializeCellsJson(
         parseCellsJson(typeof sheetRecord.cellsJson === 'string' ? sheetRecord.cellsJson : '{}'),
       ),
@@ -148,6 +154,8 @@ export function parseWorkbookExportPayload(text: string): WorkbookExportParseRes
           typeof sheetRecord.colWidthsJson === 'string' ? sheetRecord.colWidthsJson : '{}',
         ),
       ),
+      frozenRows: clampFrozen(sheetRecord.frozenRows, Math.min(5, rowCount - 1)),
+      frozenCols: clampFrozen(sheetRecord.frozenCols, Math.min(5, colCount - 1)),
     });
   }
 
@@ -157,9 +165,11 @@ export function parseWorkbookExportPayload(text: string): WorkbookExportParseRes
       formatVersion: WORKBOOK_EXPORT_FORMAT_VERSION,
       exportedAt: typeof record.exportedAt === 'number' ? record.exportedAt : 0,
       workbook: {
-        name: typeof workbookRecord.name === 'string' ? workbookRecord.name : '',
-        namedRangesJson: sanitizeNamedRangesJson(
-          typeof workbookRecord.namedRangesJson === 'string' ? workbookRecord.namedRangesJson : '{}',
+        name: typeof workbookRecord.name === 'string' ? workbookRecord.name.trim() : '',
+        namedRangesJson: JSON.stringify(
+          parseNamedRangesJson(
+            typeof workbookRecord.namedRangesJson === 'string' ? workbookRecord.namedRangesJson : '{}',
+          ),
         ),
         sheets,
       },

@@ -1,34 +1,34 @@
 /* Docked at the bottom of the viewport (Google-Sheets-style) — the last
-   child of WorkbookView.module.css's `.view` flex column, which is now a
-   genuinely viewport-bounded box (`app/s/[workbookId]/page.tsx`'s
-   `data-plugin-fullbleed` — see that file's comment) rather than growing to
-   fit content, so this strip lands at the bottom of the viewport for free
-   from normal flex flow with no `position: sticky` needed.
-   `SheetGrid.module.css`'s `.scroller` is the one element that actually
-   scrolls internally (a real `overflow-y: auto` with a bounded height now
-   that the ancestor chain resolves); this row and everything above it
-   (header, toolbar, formula bar, column-letter row) stay in place as a
-   result, without any of them needing sticky positioning either.
-   `flex-shrink: 0` still guards against `SheetGrid`'s own `flex: 1` growth
-   ever compressing this row. Border/padding moved from bottom to top edge
-   since this strip now sits below the grid rather than above it. */
+   child of WorkbookView.module.css's `.view` flex column, which is a
+   viewport-bounded box (`app/s/[workbookId]/page.tsx`'s
+   `data-plugin-fullbleed`), so this strip lands at the bottom for free from
+   normal flex flow with no `position: sticky` needed. `flex-shrink: 0`
+   guards against `SheetGrid`'s own `flex: 1` growth ever compressing it. */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--sv-space-1);
+  flex-shrink: 0;
+  border-top: 1px solid var(--sv-color-border);
+  padding-top: var(--sv-space-1);
+  min-width: 0;
+}
+
 .tabs {
   display: flex;
   align-items: center;
   gap: var(--sv-space-1);
   overflow-x: auto;
-  flex-shrink: 0;
-  border-top: 1px solid var(--sv-color-border);
-  padding-top: var(--sv-space-1);
+  min-width: 0;
 }
 
 .tab {
   display: flex;
   align-items: center;
-  gap: var(--sv-space-1);
   border-radius: var(--sv-radius-sm) var(--sv-radius-sm) 0 0;
-  padding: var(--sv-space-1) var(--sv-space-2);
+  padding: 0 var(--sv-space-1);
   white-space: nowrap;
+  min-height: var(--sv-touch-target-min, 2.25rem);
 }
 
 .tab.active {
@@ -38,10 +38,17 @@
 .tabLabel {
   background: none;
   border: none;
+  border-radius: var(--sv-radius-sm);
   color: var(--sv-color-text-muted);
   cursor: pointer;
   font-size: var(--sv-font-size-sm);
-  padding: var(--sv-space-1);
+  padding: var(--sv-space-1) var(--sv-space-2);
+  min-height: 2rem;
+}
+
+.tabLabel:focus-visible {
+  outline: 2px solid var(--sv-color-accent);
+  outline-offset: -2px;
 }
 
 .tab.active .tabLabel {
@@ -49,46 +56,77 @@
   font-weight: 600;
 }
 
+.renameWrap {
+  position: relative;
+  padding: var(--sv-space-1) 0;
+}
+
 .renameInput {
   height: 1.75rem;
-  width: 8rem;
-}
-
-.tabControls {
-  display: flex;
-  gap: 2px;
-}
-
-.tabControl {
-  background: none;
-  border: none;
-  color: var(--sv-color-text-subtle);
-  cursor: pointer;
+  width: 9rem;
+  border: 1px solid var(--sv-color-border-strong);
+  border-radius: var(--sv-radius-sm);
+  background: var(--sv-color-surface);
+  color: var(--sv-color-text-primary);
   font-size: var(--sv-font-size-sm);
-  line-height: 1;
-  padding: 2px 4px;
+  padding: 0 var(--sv-space-2);
 }
 
-.tabControl:hover:not(:disabled) {
+.renameInputInvalid {
+  border-color: var(--sv-color-error-border);
+}
+
+/* Sits above the strip (the strip is docked at the bottom of the viewport,
+   so there is no room below). */
+.renameError {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin: 0 0 var(--sv-space-1);
+  padding: var(--sv-space-1) var(--sv-space-2);
+  border: 1px solid var(--sv-color-error-border);
+  border-radius: var(--sv-radius-sm);
+  background: var(--sv-color-surface);
+  color: var(--sv-color-error-text);
+  font-size: var(--sv-font-size-xs);
+  white-space: nowrap;
+  z-index: 2;
+}
+
+/* Only the active tab shows its actions menu, so the strip stays quiet. */
+.tabMenuButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--sv-radius-sm);
+  background: transparent;
+  color: var(--sv-color-text-muted);
+  cursor: pointer;
+}
+
+.tabMenuButton:hover {
+  background: var(--sv-color-surface);
   color: var(--sv-color-text-primary);
 }
 
-.tabControl:disabled {
-  opacity: 0.3;
-  cursor: default;
-}
-
 .addTab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: 1px dashed var(--sv-color-border);
   border-radius: var(--sv-radius-sm);
   color: var(--sv-color-text-muted);
   cursor: pointer;
   flex-shrink: 0;
-  height: 1.75rem;
-  width: 1.75rem;
+  height: 2rem;
+  width: 2rem;
 }
 
 .addTab:hover {
   color: var(--sv-color-text-primary);
+  border-color: var(--sv-color-border-strong);
 }

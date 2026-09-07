@@ -20,9 +20,6 @@
   flex: 1;
 }
 
-/* Undo/Redo — moved here from WorkbookView.module.css's old `.toolbarBar`
-   (workbook-level actions now live in this same toolbar, directly above the
-   grid, rather than in their own row between the header and sheet tabs). */
 .toolbarIconButton {
   display: inline-flex;
   align-items: center;
@@ -46,14 +43,9 @@
   cursor: default;
 }
 
-/* Pressed state for a toggleable toolbar icon button (Bold/Italic) — layered
-   on top of `.toolbarIconButton` via a second class, not a variant prop,
-   since these are now plain `<button>`s rather than the `Button` component
-   (switched to get uniform 28px icon-button sizing matching Undo/Redo,
-   instead of `Button`'s text-button padding). Same visual language as
-   Docs' `RichTextEditor.module.css` `.toolbarButtonActive` — a sunken fill
-   plus an inset border, not just a color change, so the pressed state reads
-   clearly even for a colorblind user. */
+/* Pressed state for a toggleable toolbar icon button (Bold/Italic) — a
+   sunken fill plus an inset border, not just a color change, so the
+   pressed state reads clearly even for a colorblind user. */
 .toolbarIconButtonActive {
   background: var(--sv-color-surface-sunken);
   color: var(--sv-color-text-primary);
@@ -65,8 +57,6 @@
   color: var(--sv-color-text-primary);
 }
 
-/* Separates the Undo/Redo and Named ranges groups from the per-cell
-   formatting group — same pattern as Docs' RichTextEditor toolbar. */
 .divider {
   width: 1px;
   height: 20px;
@@ -75,18 +65,24 @@
 }
 
 .formatSelect {
-  width: 8.5rem;
+  width: 7.5rem;
 }
 
-.fontSizeSelect {
+.currencySelect {
   width: 5rem;
 }
 
+.fontSizeSelect {
+  width: 5.5rem;
+}
+
+.alignSelect {
+  width: 8rem;
+}
+
 /* Font color toolbar trigger — a plain "A" with a colored bar underneath
-   showing the active cell's current font color (or none), the same idea as
-   Word/Sheets' own toolbar convention. A 1px border on the bar itself (not
-   just relying on its fill) keeps it visible even when transparent, i.e.
-   "no color" set on the active cell. */
+   showing the active cell's current font color, the same idea as
+   Word/Sheets' own toolbar convention. */
 .colorTrigger {
   display: flex;
   flex-direction: column;
@@ -95,13 +91,6 @@
   line-height: 1;
 }
 
-/* Widened and thickened from an earlier hairline version that read as
-   barely-there at a glance (report: "font color and background color is
-   less visible") — this needs to read as a color swatch, not a text
-   underline. The border defaults to `--sv-color-border` (visible even when
-   transparent, i.e. "no color" set) but SheetGrid.tsx overrides it inline
-   to match the fill when a color IS set, so the edge reinforces the color
-   instead of visually competing with it. */
 .colorTriggerBar {
   width: 18px;
   height: 5px;
@@ -109,13 +98,6 @@
   border-radius: 1px;
 }
 
-/* Fill color toolbar trigger — a paint-bucket icon with a colored bar
-   underneath showing the active cell's current background fill (or none,
-   via the same border-always-visible treatment as .colorTriggerBar above),
-   matching Google Sheets' fill-color control. Previously a bare empty
-   swatch with no icon at all — reported as unclear what the control did at
-   a glance. Same vertical icon+bar layout as .colorTrigger above, kept as
-   its own class since it wraps an <Icon> rather than a text glyph. */
 .fillTrigger {
   display: flex;
   flex-direction: column;
@@ -146,97 +128,128 @@
   overflow: auto;
   border: 1px solid var(--sv-color-border);
   border-radius: var(--sv-radius-sm);
+  background: var(--sv-color-surface);
   flex: 1;
   min-height: 0;
   min-width: 0;
-  /* `min-width: 0` alone isn't enough here: it stops *this* element from
-     refusing to shrink during flex layout, but every ancestor up through
-     the platform shell's own grid-item `<main>` still separately queries
-     this element's *intrinsic* min-content width when computing their own
-     size (a different sizing pass) — and that walks straight through
-     min-width overrides into the (very wide, many-column) table inside.
-     `contain: inline-size` makes this element report a zero inline-size
-     contribution to that outer query entirely, while its own internal
-     layout (and this element's `overflow: auto` scrolling) is unaffected —
-     the one fix that actually stops the whole page from stretching wider
-     than the viewport instead of just the grid scrolling internally. */
+  /* `min-width: 0` alone isn't enough here: every ancestor up through the
+     platform shell's own grid-item `<main>` still separately queries this
+     element's *intrinsic* min-content width when computing their own size,
+     and that walks straight through min-width overrides into the (very
+     wide, many-column) table inside. `contain: inline-size` makes this
+     element report a zero inline-size contribution to that outer query,
+     while its own internal layout and `overflow: auto` scrolling are
+     unaffected. */
   contain: inline-size;
+  outline: none;
 }
 
-/* Applied while a range-selection drag is in progress (`SheetGrid.tsx`'s
-   `dragging` state) — without this, dragging the pointer across cells to
-   build a selection also triggers the browser's own native text-selection
-   within whichever `<input>` the drag started in, visibly fighting the
-   selection highlight below. */
-.dragging {
+/* Applied while a range-selection drag is in progress — without this,
+   dragging across cells also triggers the browser's own native text
+   selection within whichever `<input>` the drag started in. */
+.dragging,
+.filling {
   user-select: none;
 }
 
+.filling {
+  cursor: crosshair;
+}
+
 /*
- * `width: max-content` is load-bearing, not decorative: a `table-layout:
- * fixed` table with `width: auto` (the default) undergoes ordinary
- * shrink-to-fit sizing for its own box — which caps the table at the
- * *available* width of its containing block (`.scroller`) rather than
- * growing to the sum of its `<colgroup>` column widths. That silently
- * squeezed every column proportionally to fit whenever the sheet was wide
- * enough to need `.scroller`'s horizontal scroll (any default-sized sheet,
- * 20 columns), so a column resized to e.g. 200px rendered narrower than
- * requested instead of triggering scroll. `max-content` opts the table back
- * into sizing from its own content (here, the `<colgroup>` widths) so
- * `.scroller`'s `overflow: auto` — not table shrinkage — is what handles a
- * sheet wider than the viewport.
+ * Geometry contract with SheetGrid.tsx's virtualization: every cell's box
+ * is *exactly* the height the component computed for its row — no cell
+ * padding, no cell border (borders are drawn with an inset box-shadow on
+ * the input so they take no space). The table is `border-collapse:
+ * separate` with zero spacing for the same reason: a collapsed border
+ * model splits border widths across neighbouring cells in ways that make
+ * row pitch depend on the browser, and the scroller needs to position
+ * rows by arithmetic alone.
  */
 .grid {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
-  width: max-content;
 }
 
-/* The row-number column's own <col> in the grid's <colgroup> — fixed,
-   never resizable (only data columns get a resize handle). Matches the
-   2.5rem `.rowHeader`/`.cornerHeader` width this column already rendered
-   at before per-column <colgroup> widths existed. */
 .rowHeaderCol {
-  width: 2.5rem;
+  width: 40px;
 }
 
-/* No `min-width` here (or on `.colHeader` below) — in `table-layout: fixed`,
-   a <col>'s own `width` (set inline per-column in SheetGrid.tsx from
-   `columnWidths`/`DEFAULT_COL_WIDTH_PX`) is what actually sizes each column;
-   `min-width` on the header/row cells themselves plays no part in that
-   algorithm and would only be misleading dead weight once resizing exists. */
 .cornerHeader,
 .colHeader,
 .rowHeader {
   background: var(--sv-color-surface-sunken);
-  border: 1px solid var(--sv-color-border);
+  box-shadow:
+    inset -1px 0 0 var(--sv-color-border),
+    inset 0 -1px 0 var(--sv-color-border);
   color: var(--sv-color-text-muted);
-  font-size: var(--sv-font-size-sm);
+  font-size: var(--sv-font-size-xs);
   font-weight: 500;
   position: sticky;
   top: 0;
-  z-index: 1;
-  padding: var(--sv-space-1);
+  z-index: 3;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: center;
+  user-select: none;
+  cursor: pointer;
 }
 
 .rowHeader {
   left: 0;
   top: auto;
-  text-align: center;
+  z-index: 2;
 }
 
 .cornerHeader {
   left: 0;
+  z-index: 5;
+}
+
+/* A header whose row/column intersects the selection — the same subtle
+   tint Excel/Sheets use so the selection's extent reads along both axes. */
+.cornerHeader.headerSelected,
+.colHeader.headerSelected,
+.rowHeader.headerSelected {
+  background: var(--sv-color-accent-subtle);
+  color: var(--sv-color-text-primary);
+}
+
+/* Frozen panes: cells pinned along an axis while the rest scrolls. The
+   `left`/`top` offsets are set inline per cell from the column-width and
+   row-height prefix sums. Opaque backgrounds are load-bearing — a sticky
+   cell scrolls *over* its neighbours. */
+.cell.frozenCol {
+  position: sticky;
+  z-index: 1;
+  background: var(--sv-color-surface);
+  box-shadow: inset -1px 0 0 var(--sv-color-border-strong);
+}
+
+.cell.frozenRow {
+  position: sticky;
   z-index: 2;
+  background: var(--sv-color-surface);
+}
+
+.cell.frozenRow.frozenCol {
+  z-index: 4;
+}
+
+.colHeader.frozenCol {
+  z-index: 4;
+}
+
+.rowHeader.frozenRow {
+  z-index: 4;
 }
 
 /* Drag handle on a column header's right edge. `position: sticky` on
-   `.colHeader` already establishes a positioned containing block for this
-   (sticky counts as "positioned" the same way relative/absolute/fixed do),
-   so no extra `position: relative` is needed there. `touch-action: none`
-   stops a touch drag from also trying to scroll the page. `z-index: 3` sits
-   above `.cornerHeader`'s own `2` so the handle stays interactive even where
-   a scrolled-past column header's edge lines up with it. */
+   `.colHeader` already establishes a positioned containing block for this.
+   `touch-action: none` stops a touch drag from also scrolling the page. */
 .resizeHandle {
   position: absolute;
   top: 0;
@@ -256,72 +269,119 @@
 }
 
 .cell {
-  border: 1px solid var(--sv-color-border);
   padding: 0;
+  border: 0;
   position: relative;
+  box-sizing: border-box;
+  vertical-align: top;
 }
 
-/* Multi-cell selection highlight — a translucent tint over the range (not a
-   plain `background-color`: a cell can already have its own arbitrary
-   inline fill color, `SheetGrid.tsx`'s `meta.style.bg`, and a background
-   set on `.cell` here would either lose to or clash with that inline style
-   depending on paint order; a separate `::after` layer composites over any
-   fill instead) plus a solid border tracing just the OUTER edge of the
-   selected rectangle, not every individual cell — same visual language as
-   Excel/Sheets' own selection marquee. `--sv-color-accent-subtle` is the
-   design system's existing `color-mix(in srgb, var(--sv-color-accent) 12%,
-   transparent)` token (already used for badge/chip tints), reused here
-   rather than inventing a new one.
-   Compound `.cell.cellSelected` (etc.) selectors, not bare `.cellSelected` —
-   guards against the exact CSS-cascade-order bug already hit and fixed once
-   in this plugin (`FormulaBar.module.css`, see CLAUDE.md's 0.14.1 entry):
-   two equal-specificity single-class rules on the same element have their
-   winner decided by unpredictable CSS-module chunk load order, not source
-   intent. A two-class compound selector always outranks either single-class
-   rule regardless of load order. */
-.cell.cellSelected::after {
+/* Multi-cell selection highlight — a translucent tint over the range plus
+   a solid line tracing just the OUTER edge of the selected rectangle, both
+   drawn on a `::after` overlay so they composite over any inline fill color
+   without changing the cell's size. Compound `.cell.cellSelected` (etc.)
+   selectors, not bare `.cellSelected` — two equal-specificity single-class
+   rules on the same element have their winner decided by unpredictable
+   CSS-module chunk load order; a two-class compound always outranks either. */
+.cell.cellSelected::after,
+.cell.fillPreview::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--sv-color-accent-subtle);
   pointer-events: none;
+  box-sizing: border-box;
 }
 
-.cell.cellSelectionEdgeTop {
+.cell.cellSelected::after {
+  background: var(--sv-color-accent-subtle);
+}
+
+.cell.cellSelected.edgeTop::after {
   border-top: 2px solid var(--sv-color-accent);
 }
 
-.cell.cellSelectionEdgeBottom {
+.cell.cellSelected.edgeBottom::after {
   border-bottom: 2px solid var(--sv-color-accent);
 }
 
-.cell.cellSelectionEdgeLeft {
+.cell.cellSelected.edgeLeft::after {
   border-left: 2px solid var(--sv-color-accent);
 }
 
-.cell.cellSelectionEdgeRight {
+.cell.cellSelected.edgeRight::after {
   border-right: 2px solid var(--sv-color-accent);
 }
 
-/* `cursor: default` (not the browser's native text-input I-beam) while a
-   cell is only *selected*, not being edited — a click selects, matching
-   Google Sheets/Docs; a genuine text cursor only makes sense once
-   double-click, F2, or direct typing has actually entered edit mode
-   (`.cellInputEditing` below, a compound selector for the same
-   cascade-order reason documented on `.cell.cellSelected` above). */
+/* Autofill preview while the fill handle is being dragged. */
+.cell.fillPreview::after {
+  border: 1px dashed var(--sv-color-accent);
+  background: var(--sv-color-accent-subtle);
+}
+
+/* The small square at the selection's bottom-right corner that starts an
+   autofill drag — Excel/Sheets' "fill handle". */
+.fillHandle {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 7px;
+  height: 7px;
+  background: var(--sv-color-accent);
+  border: 1px solid var(--sv-color-surface);
+  border-radius: 1px;
+  cursor: crosshair;
+  z-index: 2;
+}
+
+/* In-cell dropdown trigger for a cell with a list validation rule. */
+.listTrigger {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--sv-radius-sm);
+  background: var(--sv-color-surface-sunken);
+  color: var(--sv-color-text-muted);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.listTrigger:hover {
+  color: var(--sv-color-text-primary);
+}
+
+/* The cell's grid lines live here as an inset shadow (right + bottom edge),
+   so a cell's box stays exactly the computed row height and column width. */
 .cellInput {
+  display: block;
   background: none;
   border: none;
+  box-shadow:
+    inset -1px 0 0 var(--sv-color-border),
+    inset 0 -1px 0 var(--sv-color-border);
   color: var(--sv-color-text-primary);
   font-size: var(--sv-font-size-sm);
-  padding: var(--sv-space-1) var(--sv-space-2);
+  line-height: 1.4;
+  padding: 0 var(--sv-space-2);
   width: 100%;
   box-sizing: border-box;
+  /* A selected-but-not-editing cell is read-only — no I-beam. */
   cursor: default;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .cellInput.cellInputEditing {
   cursor: text;
+  background: var(--sv-color-surface);
+  position: relative;
+  z-index: 1;
 }
 
 .cellInput:focus {
@@ -338,5 +398,13 @@
 }
 
 .invalid {
-  box-shadow: inset 0 0 0 1px var(--sv-color-error-border);
+  box-shadow:
+    inset 0 0 0 1px var(--sv-color-error-border),
+    inset -1px 0 0 var(--sv-color-border),
+    inset 0 -1px 0 var(--sv-color-border);
+}
+
+.spacer td {
+  padding: 0;
+  border: 0;
 }

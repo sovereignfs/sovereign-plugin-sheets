@@ -1,26 +1,44 @@
 import type { HyperFormula } from 'hyperformula';
 import type { CellFormat } from './cells';
+import { DEFAULT_CURRENCY } from './config';
 
 /**
  * Formats an already-computed cell display value per its `fmt` — a no-op
  * for 'plain'/undefined or a non-numeric value (a format enum applies to a
  * number the formula engine actually resolved, not to arbitrary text).
+ * Locale is pinned to `en-US` so the server-rendered HTML and the client's
+ * hydration agree byte-for-byte regardless of the viewer's OS locale — the
+ * grid is rendered on both sides.
  */
 export function formatCellValue(
   raw: string,
   fmt: CellFormat | undefined,
   rawValue: unknown,
   engine: HyperFormula,
+  currency?: string,
 ): string {
   if (!fmt || fmt === 'plain') return raw;
   const numeric = typeof rawValue === 'number' ? rawValue : Number(rawValue);
   if (!Number.isFinite(numeric)) return raw;
 
   if (fmt === 'number') {
-    return numeric.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return numeric.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+  if (fmt === 'percent') {
+    return numeric.toLocaleString('en-US', { style: 'percent', maximumFractionDigits: 2 });
   }
   if (fmt === 'currency') {
-    return `$${numeric.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    try {
+      return numeric.toLocaleString('en-US', {
+        style: 'currency',
+        currency: currency ?? DEFAULT_CURRENCY,
+        currencyDisplay: 'narrowSymbol',
+      });
+    } catch {
+      // An unknown ISO code (stored data is validated, but Intl's own list
+      // can lag) — fall back to the code as a prefix rather than crashing.
+      return `${currency ?? DEFAULT_CURRENCY} ${numeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
   }
   if (fmt === 'date') {
     try {

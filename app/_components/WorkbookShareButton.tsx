@@ -11,6 +11,7 @@ interface WorkbookShareButtonProps {
   listMembersAction: () => Promise<WorkbookMemberView[]>;
   searchUsersAction: (query: string) => Promise<DirectoryUser[]>;
   inviteAction: (prevState: ActionResult | null, formData: FormData) => Promise<ActionResult>;
+  updateRoleAction: (userId: string, role: string) => Promise<ActionResult>;
   removeAction: (userId: string) => Promise<ActionResult>;
 }
 
@@ -19,6 +20,7 @@ export function WorkbookShareButton({
   listMembersAction,
   searchUsersAction,
   inviteAction,
+  updateRoleAction,
   removeAction,
 }: WorkbookShareButtonProps) {
   const [open, setOpen] = useState(false);
@@ -34,6 +36,7 @@ export function WorkbookShareButton({
         listMembersAction={listMembersAction}
         searchUsersAction={searchUsersAction}
         inviteAction={inviteAction}
+        updateRoleAction={updateRoleAction}
         removeAction={removeAction}
       />
     </>

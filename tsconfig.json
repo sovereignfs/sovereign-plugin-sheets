@@ -1,12 +1,5 @@
 {
   "extends": "@sovereignfs/tsconfig/nextjs.json",
-  "compilerOptions": {
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    }
-  },
   "include": [
     "css-modules.d.ts",
     "app/**/*.ts",

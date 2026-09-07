@@ -23,8 +23,11 @@ paste, bulk clear), a click-to-select/double-click-to-edit interaction
 model, cell font size, a toolbar icon polish pass, a font-color
 default swatch fix, color-picker auto-close-on-selection, Home page
 polish (shared-heading spacing + a ghost "add" tile), a ghost-tile
-position + sizing fix, and a critical missing-Postgres-migrations fix
-shipped post-MVP** (tasks 6, 8–11, 13–30) —
+position + sizing fix, a critical missing-Postgres-migrations fix, an
+account-deletion handler, and a hardening/editor overhaul (revision-checked
+saves, OS clipboard, virtualized grid, frozen panes, insert/delete
+rows/columns, sort, autofill, find/replace, workbook rename, Recently
+deleted) shipped post-MVP** (tasks 6, 8–11, 13–32) —
 see SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/"Named
 ranges"/"Cell styling and data validation"/"Full-workbook JSON
 export/import"/"Sheet size: default and manual growth"/"Workbook editor
@@ -36,7 +39,7 @@ select, double-click to edit"/"Cell font size"/"Toolbar icon polish:
 Bold/Italic/Fill color"/"Font color default swatch fix"/"Color picker
 auto-close on selection"/"Home page polish: shared-heading spacing +
 ghost \"add\" tile"/"Ghost tile position + sizing fix"/"Critical: missing
-Postgres migrations" sections.
+Postgres migrations"/"Hardening and editor overhaul" sections.
 
 Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
@@ -48,7 +51,7 @@ Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 | Route prefix | `/sheets`                                             |
 | Database     | `isolated` — own SQLite file, no slug-prefix required |
 | Permissions  | `auth:session`, `db:readWrite`, `notifications:send`  |
-| Min platform | `0.42.0`                                              |
+| Min platform | `0.98.1`                                              |
 
 ## MVP scope discipline
 
@@ -82,22 +85,23 @@ implies); named ranges is _just names →
 formula/reference_; data validation (task 11) is _per-cell soft validation
 only_ — a number-range or list rule that renders a visual indicator, never
 blocks a commit, and has no range-based/multi-cell or custom-formula rule
-support (task 23's selection model didn't change this — validation stays
-single-cell, a deliberate scope line, not an oversight); full-workbook
+support beyond what task 32 added (a rule now applies to the whole
+selection and a list rule gets an in-cell dropdown — still soft, still no
+custom-formula rules); full-workbook
 export/import (task 13) is a _native JSON backup/restore format only_ —
 lossless within Sheets (formulas, styling, validation, named ranges all
 round-trip), but not an XLSX/Excel-interoperable file, and import only ever
 creates a **new** workbook, never an in-place merge/overwrite; multi-cell
-selection (task 23) is copy/cut/paste, bulk formatting, and bulk clear
-_within this app only_ — no OS clipboard integration (no paste from/to
-Excel or a text file), and no range-based conditional formatting (still
-tracked separately, see "Post-MVP" below); the click-to-select/
-double-click-to-edit model (task 24) matches Google Sheets/Docs' basic
-click semantics but doesn't add anything beyond that — no cell-range
-autofill/drag-to-fill handle, no in-cell rich text. Don't conflate "sharing/
-import/formatting/named-ranges/validation/full-workbook-export/selection/
-edit-model shipped" with "collaboration/full-fidelity CSV import/full
-styling/hard validation/XLSX interoperability/OS clipboard interop
+selection (task 23) is copy/cut/paste, bulk formatting, and bulk clear;
+task 32 added OS clipboard interop (tab-separated text to/from Excel,
+Google Sheets, plain text), an autofill drag handle, and draft-on-commit
+editing, but still no range-based conditional formatting (tracked
+separately, see "Post-MVP" below) and no in-cell rich text. Task 32's
+concurrency work is _conflict detection_ (a revision check per save, a
+poll that reloads viewers) — not real-time merging or presence. Don't
+conflate "sharing/import/formatting/named-ranges/validation/full-workbook-
+export/selection/edit-model/clipboard shipped" with "collaboration/
+full-fidelity CSV import/full styling/hard validation/XLSX interoperability
 shipped."
 
 ## `FINANCE()` is currency conversion only
@@ -171,7 +175,39 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.18.0** — feat: account deletion handler
+Current version: **0.19.0** — feat: hardening and editor overhaul, task 32.
+One pass over a 28-item review of the whole plugin. The load-bearing
+change is architectural: `SheetGrid` is now a view over a `SheetOps`
+interface (`app/_lib/sheet-ops.ts`) that `WorkbookView` implements — it
+alone owns the HyperFormula engine, the per-sheet metadata/width maps, and
+a single per-sheet save queue (`saveSheetAction`: cells + size + widths +
+frozen panes in one revision-checked row update; at most one request in
+flight per sheet, edits mid-flight coalesce into one follow-up). New
+`sheets.revision`/`frozen_rows`/`frozen_cols` columns (both dialects).
+Server actions return `ActionResult` (with `denied`) instead of `void`, and
+every stored field is validated/clamped server-side through the same
+sanitizers import uses — the earlier `resizeSheetAction` accepted any row
+count. `getFinanceRatesAction` now requires a session, validates codes,
+caps pairs, and the provider fetch has a timeout; FINANCE() itself records
+the pairs it couldn't resolve so cell-reference arguments work.
+Editing is draft-on-commit (one undo step per edit), the formula bar
+commits to the cell it was opened on, structural changes clear the undo
+stacks, the grid is row-virtualized with a fixed CSS geometry contract
+(see `SheetGrid.module.css`), and the rest is features: OS clipboard,
+autofill handle, header selection, context/Insert/View menus, insert/
+delete rows and columns, sort, frozen panes, find/replace, alignment,
+percent and per-cell currency formats, range validation with list
+dropdowns, workbook rename, Recently deleted (restore/purge), inline role
+changes in Share, `error.tsx`/`loading.tsx`. Docs/version drift fixed
+(README said 0.17.2), `CellData.f` removed, `tsconfig` `@/*` alias removed,
+`minPlatformVersion` corrected to `0.98.1` (first release with
+`ColorPicker.onSelectionComplete`), unit tests added for every pure lib
+(38 tests). Not done: the legacy SQL defaults for row/col counts
+(documented in `schema.ts` instead — a SQLite column-default change is a
+table rebuild), column virtualization. Full SPEC.md section: "Hardening
+and editor overhaul (task 32)".
+
+(Previous version: 0.18.0 — feat: account deletion handler
 (`sdk.portability.provideDelete()`), task 31. Found via a cross-plugin
 platform research survey (research doc 0020 in the platform monorepo,
 prompted by the sibling Tally plugin's own joint-data deletion concerns):

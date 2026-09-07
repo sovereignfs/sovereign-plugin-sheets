@@ -8,3 +8,10 @@
      directly inside the platform shell's own `<main>`. */
   min-width: 0;
 }
+
+.loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

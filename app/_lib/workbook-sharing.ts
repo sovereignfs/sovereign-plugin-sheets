@@ -1,7 +1,6 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { revalidatePath } from 'next/cache';
 import { sdk } from '@sovereignfs/sdk';
 import type { DirectoryUser } from '@sovereignfs/sdk';
 import { and, eq } from 'drizzle-orm';
@@ -11,26 +10,15 @@ import { getContext, now } from './context';
 import { type WorkbookMemberRole, isWorkbookMemberRole } from './workbook-rules';
 
 /**
- * Best-effort in-app notification for a new share — a failure here (the
- * notification center being briefly unavailable) must never block an invite
- * that already succeeded. In-app only, no email — smaller permission
- * surface than Docs' equivalent (see docs/adhoc/home-and-sharing.md's
- * "Open questions").
+ * Best-effort in-app notification for a share or a role change — a failure
+ * here (the notification center being briefly unavailable) must never block
+ * an invite that already succeeded. In-app only, no email — smaller
+ * permission surface than Docs' equivalent.
  */
-async function notifyMember(
-  recipientUserId: string,
-  workbookName: string,
-  workbookId: string,
-  role: WorkbookMemberRole,
-) {
+async function notifyMember(recipientUserId: string, title: string, body: string, workbookId: string) {
   try {
     await sdk.notifications.send(
-      {
-        recipientUserId,
-        title: 'Shared a workbook with you',
-        body: `You were added to "${workbookName}" as ${role}.`,
-        url: `/sheets/s/${workbookId}`,
-      },
+      { recipientUserId, title, body, url: `/sheets/s/${workbookId}` },
       await headers(),
     );
   } catch {
@@ -38,29 +26,37 @@ async function notifyMember(
   }
 }
 
+function roleLabel(role: WorkbookMemberRole): string {
+  if (role === 'owner') return 'an owner';
+  if (role === 'editor') return 'an editor';
+  return 'a viewer';
+}
+
 /**
  * Only a workbook's owner manages sharing (invite/remove/role-change) or
  * sees the member list — same gating as Docs' `folder-sharing.ts`.
  */
 async function requireOwner(workbookId: string) {
-  const { db, userId, tenantId } = await getContext();
+  const { db, userId, tenantId, userName } = await getContext();
   const [membership] = await db
-    .select({ role: workbookMembers.role })
+    .select({ role: workbookMembers.role, deletedAt: workbooks.deletedAt })
     .from(workbookMembers)
+    .innerJoin(workbooks, eq(workbooks.id, workbookMembers.workbookId))
     .where(
       and(
         eq(workbookMembers.workbookId, workbookId),
         eq(workbookMembers.tenantId, tenantId),
         eq(workbookMembers.userId, userId),
+        eq(workbooks.tenantId, tenantId),
       ),
     );
-  if (!membership || membership.role !== 'owner') {
+  if (!membership || membership.role !== 'owner' || membership.deletedAt !== null) {
     return {
       ok: false as const,
       error: "You don't have permission to manage sharing for this workbook.",
     };
   }
-  return { ok: true as const, db, userId, tenantId };
+  return { ok: true as const, db, userId, tenantId, userName };
 }
 
 /** Directory typeahead for the share dialog's member picker. */
@@ -80,15 +76,17 @@ export interface WorkbookMemberView {
   role: WorkbookMemberRole;
   name: string | null;
   email: string;
+  /** The signed-in user's own row — rendered as "You", with "Leave" instead of "Remove". */
+  isSelf: boolean;
 }
 
 export async function listWorkbookMembers(workbookId: string): Promise<WorkbookMemberView[]> {
   const context = await requireOwner(workbookId);
   if (!context.ok) return [];
-  const { db, tenantId } = context;
+  const { db, tenantId, userId } = context;
 
   const rows = await db
-    .select({ userId: workbookMembers.userId, role: workbookMembers.role })
+    .select({ userId: workbookMembers.userId, role: workbookMembers.role, joinedAt: workbookMembers.joinedAt })
     .from(workbookMembers)
     .where(and(eq(workbookMembers.workbookId, workbookId), eq(workbookMembers.tenantId, tenantId)));
   if (rows.length === 0) return [];
@@ -96,18 +94,21 @@ export async function listWorkbookMembers(workbookId: string): Promise<WorkbookM
   const profiles = await sdk.directory.resolveUsers({ ids: rows.map((row) => row.userId) });
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
 
-  return rows.map((row) => {
-    const profile = profileById.get(row.userId);
-    return {
-      userId: row.userId,
-      role: row.role,
-      name: profile?.name ?? null,
-      email: profile?.email ?? 'Unknown user',
-    };
-  });
+  return rows
+    .sort((a, b) => a.joinedAt - b.joinedAt)
+    .map((row) => {
+      const profile = profileById.get(row.userId);
+      return {
+        userId: row.userId,
+        role: row.role,
+        name: profile?.name ?? null,
+        email: profile?.email ?? 'Unknown user',
+        isSelf: row.userId === userId,
+      };
+    });
 }
 
-/** Adds a new member or changes an existing one's role — one action for both. */
+/** Adds a new member. An existing member's role is changed via `updateWorkbookMemberRole` instead. */
 export async function inviteWorkbookMember(
   workbookId: string,
   _prevState: ActionResult | null,
@@ -115,7 +116,7 @@ export async function inviteWorkbookMember(
 ): Promise<ActionResult> {
   const context = await requireOwner(workbookId);
   if (!context.ok) return context;
-  const { db, tenantId, userId } = context;
+  const { db, tenantId, userId, userName } = context;
 
   const invitedUserId = String(formData.get('userId') ?? '').trim();
   const roleInput = String(formData.get('role') ?? '').trim();
@@ -143,43 +144,80 @@ export async function inviteWorkbookMember(
     );
 
   if (existing) {
-    if (existing.role === 'owner' && roleInput !== 'owner') {
-      const owners = await db
-        .select({ userId: workbookMembers.userId })
-        .from(workbookMembers)
-        .where(
-          and(
-            eq(workbookMembers.workbookId, workbookId),
-            eq(workbookMembers.tenantId, tenantId),
-            eq(workbookMembers.role, 'owner'),
-          ),
-        );
-      if (owners.length <= 1) return { ok: false, error: 'The last owner cannot be demoted.' };
-    }
-    await db
-      .update(workbookMembers)
-      .set({ role: roleInput })
-      .where(
-        and(
-          eq(workbookMembers.workbookId, workbookId),
-          eq(workbookMembers.tenantId, tenantId),
-          eq(workbookMembers.userId, invitedUserId),
-        ),
-      );
-  } else {
-    await db.insert(workbookMembers).values({
-      workbookId,
-      userId: invitedUserId,
-      tenantId,
-      role: roleInput,
-      invitedBy: userId,
-      joinedAt: now(),
-    });
-    await notifyMember(invitedUserId, workbook.name, workbookId, roleInput);
+    return {
+      ok: false,
+      error: `${invitedUser.name ?? invitedUser.email} already has access. Change their role in the list above.`,
+    };
   }
 
-  revalidatePath(`/sheets/s/${workbookId}`);
+  await db.insert(workbookMembers).values({
+    workbookId,
+    userId: invitedUserId,
+    tenantId,
+    role: roleInput,
+    invitedBy: userId,
+    joinedAt: now(),
+  });
+  await notifyMember(
+    invitedUserId,
+    `${userName} shared "${workbook.name}" with you`,
+    `You can open it as ${roleLabel(roleInput)}.`,
+    workbookId,
+  );
+
   return { ok: true, message: `Added ${invitedUser.name ?? invitedUser.email} as ${roleInput}.` };
+}
+
+/** Changes an existing member's role in place — the last owner can't be demoted. */
+export async function updateWorkbookMemberRole(
+  workbookId: string,
+  memberUserId: string,
+  role: string,
+): Promise<ActionResult> {
+  const context = await requireOwner(workbookId);
+  if (!context.ok) return context;
+  const { db, tenantId, userId, userName } = context;
+
+  if (!isWorkbookMemberRole(role)) return { ok: false, error: 'Invalid role.' };
+
+  const members = await db
+    .select({ userId: workbookMembers.userId, role: workbookMembers.role })
+    .from(workbookMembers)
+    .where(and(eq(workbookMembers.workbookId, workbookId), eq(workbookMembers.tenantId, tenantId)));
+  const target = members.find((member) => member.userId === memberUserId);
+  if (!target) return { ok: false, error: 'That person no longer has access.' };
+  if (target.role === role) return { ok: true };
+
+  const ownerCount = members.filter((member) => member.role === 'owner').length;
+  if (target.role === 'owner' && role !== 'owner' && ownerCount <= 1) {
+    return { ok: false, error: 'The last owner cannot be demoted. Make someone else an owner first.' };
+  }
+
+  await db
+    .update(workbookMembers)
+    .set({ role })
+    .where(
+      and(
+        eq(workbookMembers.workbookId, workbookId),
+        eq(workbookMembers.tenantId, tenantId),
+        eq(workbookMembers.userId, memberUserId),
+      ),
+    );
+
+  if (memberUserId !== userId) {
+    const [workbook] = await db
+      .select({ name: workbooks.name })
+      .from(workbooks)
+      .where(and(eq(workbooks.id, workbookId), eq(workbooks.tenantId, tenantId)));
+    await notifyMember(
+      memberUserId,
+      `${userName} changed your access to "${workbook?.name ?? 'a workbook'}"`,
+      `You are now ${roleLabel(role)}.`,
+      workbookId,
+    );
+  }
+
+  return { ok: true };
 }
 
 export async function removeWorkbookMember(
@@ -203,7 +241,7 @@ export async function removeWorkbookMember(
   // anyone) without needing a separate "is this me" check.
   const ownerCount = members.filter((member) => member.role === 'owner').length;
   if (target.role === 'owner' && ownerCount <= 1) {
-    return { ok: false, error: 'The last owner cannot be removed.' };
+    return { ok: false, error: 'The last owner cannot be removed. Make someone else an owner first.' };
   }
 
   await db
@@ -216,6 +254,5 @@ export async function removeWorkbookMember(
       ),
     );
 
-  revalidatePath(`/sheets/s/${workbookId}`);
   return { ok: true };
 }

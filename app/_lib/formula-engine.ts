@@ -37,6 +37,24 @@ export function gridToCellsMap(grid: RawCellContent[][]): CellsMap {
   return cells;
 }
 
+const PLAIN_NUMBER_RE = /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+/**
+ * What goes into the engine for a raw typed/pasted string. A plain decimal
+ * literal becomes a JS number so it is stored (and exported) as a number
+ * rather than the string the user typed; anything else — formulas, dates,
+ * percentages, text — is left for HyperFormula's own parser.
+ */
+export function normalizeRawInput(raw: string): RawCellContent {
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  if (PLAIN_NUMBER_RE.test(trimmed)) {
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return raw;
+}
+
 export function isFormulaError(value: unknown): value is DetailedCellError {
   return value instanceof DetailedCellError;
 }

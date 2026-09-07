@@ -108,3 +108,10 @@
   color: var(--sv-color-text-primary);
 }
 
+
+/* Text inside a `SystemBanner` next to its action buttons — the banner
+   lays its children out in a row, so the copy needs to be the flexible one. */
+.bannerText {
+  flex: 1;
+  min-width: 12rem;
+}

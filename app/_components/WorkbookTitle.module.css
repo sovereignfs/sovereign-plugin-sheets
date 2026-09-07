@@ -1,0 +1,94 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--sv-space-1);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--sv-font-size-xl);
+  margin: 0;
+  min-width: 0;
+}
+
+/* The title text itself is the rename trigger for editors — same font as
+   the plain heading so it reads as a title, not a button, until hovered. */
+.titleButton {
+  background: none;
+  border: none;
+  padding: 0 var(--sv-space-1);
+  margin: 0 calc(-1 * var(--sv-space-1));
+  border-radius: var(--sv-radius-sm);
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titleButton:hover,
+.titleButton:focus-visible {
+  background: var(--sv-color-surface-sunken);
+  outline: none;
+}
+
+.pencil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--sv-radius-sm);
+  background: transparent;
+  color: var(--sv-color-text-subtle);
+  cursor: pointer;
+}
+
+.pencil:hover {
+  background: var(--sv-color-surface-sunken);
+  color: var(--sv-color-text-primary);
+}
+
+.editWrap {
+  position: relative;
+  min-width: 0;
+}
+
+.input {
+  font-size: var(--sv-font-size-xl);
+  font-weight: inherit;
+  padding: 0 var(--sv-space-1);
+  border: 1px solid var(--sv-color-border-strong);
+  border-radius: var(--sv-radius-sm);
+  background: var(--sv-color-surface);
+  color: var(--sv-color-text-primary);
+  width: min(28rem, 60vw);
+  max-width: 100%;
+}
+
+.inputInvalid {
+  border-color: var(--sv-color-error-border);
+}
+
+.error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: var(--sv-space-1) 0 0;
+  padding: var(--sv-space-1) var(--sv-space-2);
+  border: 1px solid var(--sv-color-error-border);
+  border-radius: var(--sv-radius-sm);
+  background: var(--sv-color-surface);
+  color: var(--sv-color-error-text);
+  font-size: var(--sv-font-size-xs);
+  white-space: nowrap;
+  z-index: 2;
+}

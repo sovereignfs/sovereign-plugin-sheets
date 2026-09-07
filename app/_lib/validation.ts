@@ -32,10 +32,26 @@ export function isCellValueValid(rawValue: unknown, rule: DataValidationRule | u
 /** Short, human-readable summary of a rule for the validation dialog/list. */
 export function describeValidationRule(rule: DataValidationRule): string {
   if (rule.type === 'range') {
-    if (rule.min !== undefined && rule.max !== undefined) return `Between ${rule.min} and ${rule.max}`;
-    if (rule.min !== undefined) return `At least ${rule.min}`;
-    if (rule.max !== undefined) return `At most ${rule.max}`;
+    if (rule.min !== undefined && rule.max !== undefined) {
+      return `Between ${String(rule.min)} and ${String(rule.max)}`;
+    }
+    if (rule.min !== undefined) return `At least ${String(rule.min)}`;
+    if (rule.max !== undefined) return `At most ${String(rule.max)}`;
     return 'Any number';
   }
   return `One of: ${rule.values.join(', ')}`;
+}
+
+/** Two rules are the same rule — used to decide whether a selection shares one rule the dialog can show as "current". */
+export function validationRulesEqual(
+  a: DataValidationRule | undefined,
+  b: DataValidationRule | undefined,
+): boolean {
+  if (!a || !b) return a === b;
+  if (a.type !== b.type) return false;
+  if (a.type === 'range' && b.type === 'range') return a.min === b.min && a.max === b.max;
+  if (a.type === 'list' && b.type === 'list') {
+    return a.values.length === b.values.length && a.values.every((value, i) => value === b.values[i]);
+  }
+  return false;
 }

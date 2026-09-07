@@ -14,7 +14,8 @@ import {
   PageHeader,
   type MenuEntry,
 } from '@sovereignfs/ui';
-import type { WorkbookOverviewItem } from '../actions';
+import type { DeletedWorkbookItem, WorkbookOverviewItem } from '../actions';
+import { DeletedWorkbooks } from './DeletedWorkbooks';
 import { ImportWorkbookButton, type ImportWorkbookHandle } from './ImportWorkbookButton';
 import { NewWorkbookDialog, type NewWorkbookDialogHandle } from './NewWorkbookDialog';
 import styles from './HomeWorkbooksList.module.css';
@@ -34,7 +35,13 @@ import styles from './HomeWorkbooksList.module.css';
  * Search collapses back to a flat match list (no grouping) across both
  * sections — grouping exists for browsing, not filtering.
  */
-export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem[] }) {
+export function HomeWorkbooksList({
+  overview,
+  deleted,
+}: {
+  overview: WorkbookOverviewItem[];
+  deleted: DeletedWorkbookItem[];
+}) {
   const [query, setQuery] = useState('');
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const newWorkbookRef = useRef<NewWorkbookDialogHandle>(null);
@@ -51,7 +58,7 @@ export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem
     ? overview.filter((workbook) => workbook.name.toLowerCase().includes(normalizedQuery))
     : overview;
 
-  const isEmptyWorkspace = overview.length === 0;
+  const isEmptyWorkspace = overview.length === 0 && deleted.length === 0;
   const hasNoResults = isSearching && filtered.length === 0;
 
   const myWorkbooks = filtered.filter((workbook) => workbook.role === 'owner');
@@ -79,7 +86,7 @@ export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem
       {isEmptyWorkspace ? (
         <EmptyState
           heading="No workbooks yet"
-          description="Create your first workbook to get started."
+          description="Create your first workbook to get started, or open one that's been shared with you from Inbox."
           action={
             <div className={styles.emptyActions}>
               <NewWorkbookDialog />
@@ -111,6 +118,9 @@ export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem
               {myWorkbooks.map((workbook) => (
                 <WorkbookTile key={workbook.id} workbook={workbook} />
               ))}
+              {myWorkbooks.length === 0 && (
+                <p className={styles.groupEmpty}>You don&apos;t own any workbooks yet.</p>
+              )}
               <Menu
                 aria-label="Add workbook"
                 open={addMenuOpen}
@@ -144,6 +154,8 @@ export function HomeWorkbooksList({ overview }: { overview: WorkbookOverviewItem
               </CardTileGrid>
             )}
           </div>
+
+          <DeletedWorkbooks deleted={deleted} />
         </div>
       )}
     </div>

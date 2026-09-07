@@ -46,12 +46,33 @@ export const sheets = sqliteTable(
       .references(() => workbooks.id),
     name: text('name').notNull(),
     position: integer('position').notNull(),
+    // SQL-level defaults are legacy (the very first migration's values) and
+    // never relied on: every insert sets both explicitly from
+    // `_lib/config.ts`'s DEFAULT_ROW_COUNT/DEFAULT_COL_COUNT. Left as-is
+    // rather than migrated — changing a column default in SQLite means a
+    // full table rebuild, not worth it for a value nothing reads.
     rowCount: integer('row_count').notNull().default(200),
     colCount: integer('col_count').notNull().default(26),
-    /** Sparse A1-keyed map: `{ [a1Ref]: { v?: string|number, f?: string, fmt?: string } }`. */
+    /**
+     * Sparse A1-keyed map: `{ [a1Ref]: { v?, fmt?, currency?, style?, validation? } }`
+     * — see `_lib/cells.ts`'s `CellData`. A formula is stored in `v` as its
+     * source text (`"=SUM(A1:A3)"`), exactly as HyperFormula serializes it.
+     */
     cellsJson: text('cells_json').notNull().default('{}'),
     /** Sparse column-index-keyed map of custom widths in px: `{ "3": 140 }` — omitted columns render at `DEFAULT_COL_WIDTH_PX` (`_lib/config.ts`). */
     colWidthsJson: text('col_widths_json').notNull().default('{}'),
+    /** Frozen panes: rows/columns pinned while the rest of the grid scrolls (0 = none). */
+    frozenRows: integer('frozen_rows').notNull().default(0),
+    frozenCols: integer('frozen_cols').notNull().default(0),
+    /**
+     * Optimistic-concurrency token, rotated on every save (`saveSheetAction`).
+     * A client sends the revision it loaded; a save whose expected revision no
+     * longer matches is rejected as a conflict instead of silently
+     * overwriting another editor's work. Text (a fresh id per save), not a
+     * counter — so two saves racing from the same starting point can never
+     * both "win" by incrementing to the same number.
+     */
+    revision: text('revision').notNull().default(''),
     updatedAt: integer('updated_at').notNull(),
   },
   (t) => [index('sheets_workbook_idx').on(t.workbookId)],
