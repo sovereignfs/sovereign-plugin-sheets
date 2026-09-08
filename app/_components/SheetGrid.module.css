@@ -318,6 +318,24 @@
   background: var(--sv-color-accent-subtle);
 }
 
+/* The cells a half-typed formula currently points at (point mode) — the
+   dashed accent outline every spreadsheet draws while a reference is
+   being picked. */
+.cell.pointedReference::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 2px dashed var(--sv-color-accent);
+}
+
+/* An error result reads as an error before the tooltip is even opened. */
+.cellInput.cellInputError {
+  color: var(--sv-color-error-text);
+  font-weight: 500;
+}
+
 /* The small square at the selection's bottom-right corner that starts an
    autofill drag — Excel/Sheets' "fill handle". */
 .fillHandle {

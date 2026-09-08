@@ -838,10 +838,10 @@ export async function purgeWorkbookAction(workbookId: string): Promise<ActionRes
   return { ok: true };
 }
 
-export interface FinanceRateResult {
-  rate: number;
-  asOf: number;
-}
+export type FinanceRateResult =
+  | { rate: number; asOf: number }
+  /** `unsupported`: the provider doesn't offer this pair (permanent). `unavailable`: the provider couldn't be reached and nothing is cached (retry later). */
+  | { error: 'unsupported' | 'unavailable' };
 
 /**
  * Resolves currency rates for FINANCE() calls, one batched round-trip per
@@ -854,11 +854,11 @@ export interface FinanceRateResult {
  */
 export async function getFinanceRatesAction(
   pairs: { base: string; quote: string }[],
-): Promise<Record<string, FinanceRateResult | null>> {
+): Promise<Record<string, FinanceRateResult>> {
   await sdk.auth.requireSession();
   const client = (await sdk.db.getClient()) as Db;
   const nowTs = now();
-  const result: Record<string, FinanceRateResult | null> = {};
+  const result: Record<string, FinanceRateResult> = {};
   const toFetch = new Map<string, Set<string>>();
 
   const requested = Array.isArray(pairs) ? pairs.slice(0, MAX_FINANCE_PAIRS_PER_REQUEST) : [];
@@ -901,7 +901,7 @@ export async function getFinanceRatesAction(
           .from(financeRateCache)
           .where(and(eq(financeRateCache.base, base), eq(financeRateCache.quote, quote)))
           .limit(1);
-        result[key] = cached ? { rate: Number(cached.rate), asOf: cached.asOf } : null;
+        result[key] = cached ? { rate: Number(cached.rate), asOf: cached.asOf } : { error: 'unavailable' };
       }
       continue;
     }
@@ -911,7 +911,7 @@ export async function getFinanceRatesAction(
       const key = pairKey(base, quote);
       const rate = fetched.rates[quote];
       if (rate === undefined) {
-        result[key] = null;
+        result[key] = { error: 'unsupported' };
         continue;
       }
       result[key] = { rate, asOf };

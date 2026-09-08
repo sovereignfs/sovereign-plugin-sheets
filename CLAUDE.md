@@ -27,7 +27,9 @@ position + sizing fix, a critical missing-Postgres-migrations fix, an
 account-deletion handler, and a hardening/editor overhaul (revision-checked
 saves, OS clipboard, virtualized grid, frozen panes, insert/delete
 rows/columns, sort, autofill, find/replace, workbook rename, Recently
-deleted) shipped post-MVP** (tasks 6, 8–11, 13–32) —
+deleted), and a formula-experience pass (point mode, function
+autocomplete, type-aware display, error explanations) shipped post-MVP**
+(tasks 6, 8–11, 13–33) —
 see SPEC.md's "Workbook sharing"/"CSV import"/"Cell number formatting"/"Named
 ranges"/"Cell styling and data validation"/"Full-workbook JSON
 export/import"/"Sheet size: default and manual growth"/"Workbook editor
@@ -39,7 +41,8 @@ select, double-click to edit"/"Cell font size"/"Toolbar icon polish:
 Bold/Italic/Fill color"/"Font color default swatch fix"/"Color picker
 auto-close on selection"/"Home page polish: shared-heading spacing +
 ghost \"add\" tile"/"Ghost tile position + sizing fix"/"Critical: missing
-Postgres migrations"/"Hardening and editor overhaul" sections.
+Postgres migrations"/"Hardening and editor overhaul"/"Formula experience"
+sections.
 
 Spec: [SPEC.md](SPEC.md) · Build order: [ROADMAP.md](ROADMAP.md)
 
@@ -175,7 +178,29 @@ of the platform version:
 - `feat/` → minor (0.x.0)
 - Breaking change → major (x.0.0)
 
-Current version: **0.19.0** — feat: hardening and editor overhaul, task 32.
+Current version: **0.20.0** — feat: formula experience, task 33. A review
+of the function path after task 32 ("functions feel buggy"), every
+finding confirmed by running HyperFormula with the plugin's own config
+before fixing. Point mode: while a formula is being typed (cell or bar)
+and the caret follows `=`/an operator/`(`/`,`, clicking, dragging, or
+arrowing to cells inserts a reference instead of committing —
+`_lib/formula-editing.ts` holds the pure logic, `SheetGrid` now owns the
+formula bar's draft (`FormulaBar` is controlled). Function autocomplete
+(`FunctionHints`, curated `_lib/function-signatures.ts`) with an argument
+hint. Type-aware display via `getCellValueDetailedType` (dates, times,
+percents, currency, booleans no longer show as serial numbers) and
+`describeCellError` tooltips. Engine config: month-first + ISO
+`dateFormats` (the default was day-first while display is `en-US`),
+`TRUE`/`FALSE` named expressions (the engine only had `TRUE()`), thousands
+separators stripped on input. FINANCE is volatile and re-evaluates via
+suspend/resume — `rebuildAndRecalculate` had been wiping undo on every
+rate fetch (a task-32 regression); unsupported pairs say so, unreachable
+ones retry. Ctrl+Z inside an edit is text undo; Enter in the bar refocuses
+the cell. A verification pass over all thirteen items then added: typed dates keep
+the pattern they were typed in (`getCellValueFormat`), and clicking a
+row/column header mid-formula inserts `3:3`/`B:B`. 19 new tests (71 total).
+
+(Previous version: 0.19.0 — feat: hardening and editor overhaul, task 32.
 One pass over a 28-item review of the whole plugin. The load-bearing
 change is architectural: `SheetGrid` is now a view over a `SheetOps`
 interface (`app/_lib/sheet-ops.ts`) that `WorkbookView` implements — it

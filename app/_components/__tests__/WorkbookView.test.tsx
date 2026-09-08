@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUTOSAVE_DELAY_MS } from '../../_lib/config';
-import { fireKey, fireMouseDown, flush, focusEl, mount, type Mounted } from './dom';
+import { AUTOSAVE_DELAY_MS, FINANCE_RETRY_MS } from '../../_lib/config';
+import { fireKey, fireMouseDown, flush, focusEl, mount, typeValue, type Mounted } from './dom';
 
 const actions = vi.hoisted(() => ({
   saveSheetAction: vi.fn(),
   setActiveSheetAction: vi.fn(async () => {}),
   recordWorkbookOpenedAction: vi.fn(async () => {}),
   getWorkbookSnapshotAction: vi.fn(async () => null),
-  getFinanceRatesAction: vi.fn(async () => ({})),
+  getFinanceRatesAction: vi.fn(async () => ({}) as Record<string, unknown>),
   addSheetAction: vi.fn(),
   deleteSheetAction: vi.fn(),
   deleteWorkbookAction: vi.fn(),
@@ -66,6 +66,7 @@ describe('WorkbookView', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     actions.saveSheetAction.mockReset();
+    actions.getFinanceRatesAction.mockClear();
   });
 
   afterEach(async () => {
@@ -95,6 +96,17 @@ describe('WorkbookView', () => {
     await focusEl(a1);
     await fireKey(a1, value);
     await fireKey(mounted.$('input[aria-label="A1"]'), 'Enter');
+  }
+
+  async function enterFormulaA1(formula: string) {
+    const a1 = mounted.$<HTMLInputElement>('input[aria-label="A1"]');
+    await fireMouseDown(a1);
+    await focusEl(a1);
+    await fireKey(a1, '=');
+    await typeValue(mounted.$<HTMLInputElement>('input[aria-label="A1"]'), formula);
+    await fireKey(mounted.$('input[aria-label="A1"]'), 'Enter');
+    await flush();
+    await flush();
   }
 
   async function advance(ms: number) {
@@ -150,6 +162,43 @@ describe('WorkbookView', () => {
     await editA1('9');
     await advance(AUTOSAVE_DELAY_MS + 50);
     expect(actions.saveSheetAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('FINANCE() fetches its rate, shows it, and keeps undo history intact', async () => {
+    actions.saveSheetAction.mockResolvedValue({ ok: true, revision: 'rev-b2' });
+    actions.getFinanceRatesAction.mockResolvedValueOnce({ 'USD/EUR': { rate: 0.9, asOf: 1_700_000_000 } });
+    await render('sheet-b');
+    await enterFormulaA1('=FINANCE("USD","EUR")*2');
+    expect(actions.getFinanceRatesAction).toHaveBeenCalledWith([{ base: 'USD', quote: 'EUR' }]);
+    expect(mounted.$<HTMLInputElement>('input[aria-label="A1"]').value).toBe('1.8');
+    expect(mounted.$<HTMLButtonElement>('[aria-label="Undo"]').disabled).toBe(false);
+  });
+
+  it('FINANCE() says when a currency pair is not offered by the provider', async () => {
+    actions.saveSheetAction.mockResolvedValue({ ok: true, revision: 'rev-b2' });
+    actions.getFinanceRatesAction.mockResolvedValueOnce({ 'USD/XXX': { error: 'unsupported' } });
+    await render('sheet-b');
+    await enterFormulaA1('=FINANCE("USD","XXX")');
+    const a1 = mounted.$<HTMLInputElement>('input[aria-label="A1"]');
+    expect(a1.value).toBe('#N/A');
+    expect(a1.title).toContain("USD/XXX isn't available");
+  });
+
+  it('FINANCE() retries on its own after the provider could not be reached', async () => {
+    actions.saveSheetAction.mockResolvedValue({ ok: true, revision: 'rev-b2' });
+    actions.getFinanceRatesAction
+      .mockResolvedValueOnce({ 'USD/JPY': { error: 'unavailable' } })
+      .mockResolvedValueOnce({ 'USD/JPY': { rate: 0.5, asOf: 1_700_000_000 } });
+    await render('sheet-b');
+    await enterFormulaA1('=FINANCE("USD","JPY")');
+    expect(actions.getFinanceRatesAction).toHaveBeenCalledTimes(1);
+    const a1 = mounted.$<HTMLInputElement>('input[aria-label="A1"]');
+    expect(a1.value).toBe('#N/A');
+    expect(a1.title).toContain('Fetching the exchange rate');
+    await advance(FINANCE_RETRY_MS + 50);
+    await flush();
+    expect(actions.getFinanceRatesAction).toHaveBeenCalledTimes(2);
+    expect(mounted.$<HTMLInputElement>('input[aria-label="A1"]').value).toBe('0.5');
   });
 
   it('a denied save shows the access-lost banner instead of "Saved"', async () => {

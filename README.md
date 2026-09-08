@@ -2,7 +2,7 @@
 
 A lightweight, self-hostable spreadsheet for [Sovereign](https://github.com/sovereignfs/sovereign), with a built-in currency conversion function.
 
-**Status:** v0.19.0 — MVP complete plus every post-MVP task through 32 (workbook sharing, CSV and JSON import/export, cell formatting, named ranges, validation, multi-cell selection, and the task-32 hardening/editor overhaul — see [ROADMAP.md](ROADMAP.md))
+**Status:** v0.20.0 — MVP complete plus every post-MVP task through 33 (workbook sharing, CSV and JSON import/export, cell formatting, named ranges, validation, multi-cell selection, and the task-32 hardening/editor overhaul — see [ROADMAP.md](ROADMAP.md))
 **Plugin ID:** `fs.sovereign.sheets`
 **Route:** `/sheets`
 
@@ -40,7 +40,11 @@ validation dropdowns, workbook rename, a Recently deleted section with
 restore, and a virtualized grid that stays fast at the 2000×100 size cap.
 Saves are revision-checked, so two editors on one sheet get a conflict
 notice instead of overwriting each other — see SPEC.md's "Hardening and
-editor overhaul" section.
+editor overhaul" section. Formulas get point mode (click or arrow to a
+cell while typing one), function autocomplete with argument hints,
+type-aware display (dates, percents and currency show as such), and
+plain-language error explanations — see SPEC.md's "Formula experience"
+section.
 
 See [SPEC.md](SPEC.md) for the full functional requirements and data model,
 and [ROADMAP.md](ROADMAP.md) for the proposed build order.

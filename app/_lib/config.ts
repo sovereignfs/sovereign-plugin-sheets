@@ -85,6 +85,8 @@ export const MAX_VALIDATION_LIST_VALUE_LENGTH = 200;
 export const MAX_FINANCE_PAIRS_PER_REQUEST = 50;
 /** Outbound Frankfurter request timeout. */
 export const FX_FETCH_TIMEOUT_MS = 8_000;
+/** How long a FINANCE() cell waits before retrying after the provider couldn't be reached. */
+export const FINANCE_RETRY_MS = 30_000;
 
 /**
  * How often an open workbook asks the server whether someone else changed

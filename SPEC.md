@@ -1863,6 +1863,78 @@ width maps, and a single save queue.
 - `minPlatformVersion` corrected to `0.98.1` — the first platform release
   carrying `ColorPicker`'s `onSelectionComplete`, which the toolbar uses.
 
+## Formula experience (task 33)
+
+A follow-up review of the formula and function path after task 32,
+driven by "functions feel buggy" and confirmed by running the engine with
+the plugin's exact configuration. Thirteen findings, all addressed.
+
+### Entering formulas
+
+- **Point mode.** While a formula is being typed — in a cell or in the
+  formula bar — and the caret follows `=`, an operator, `(` or `,`,
+  clicking a cell inserts its reference instead of committing the
+  half-typed formula; dragging or Shift+clicking inserts a range; arrow
+  keys move the reference (Shift+Arrow extends it); a row or column header
+  inserts a whole-row/whole-column reference (`3:3`, `B:B`). The pointed
+  cells get a dashed accent outline. Pure logic in `_lib/formula-editing.ts`
+  (`referenceInsertionRange`, `insertReference`); the grid owns both
+  drafts (the formula bar became controlled: `draft`, `onDraftChange`).
+- **Function autocomplete.** Typing a partial name after `=`/an operator
+  lists matching functions (popular and documented ones first, then the
+  rest of HyperFormula's registered names); Up/Down choose, Tab/Enter or
+  click complete to `NAME(`. Inside a call, the hint line under the bar
+  shows the signature with the current parameter highlighted, from a
+  curated table (`_lib/function-signatures.ts`, ~80 functions).
+- **Keyboard**: Ctrl+Z/Y inside an edit is the field's own text undo;
+  Shift+Arrow inside an edit selects text; Enter/Escape in the formula
+  bar return focus to the cell.
+
+### Reading results
+
+- **Type-aware display.** With no explicit format, a value's own type
+  decides how it renders (`getCellValueDetailedType`): `=TODAY()` and a
+  typed date show as a date, `12:30` as a time, `5%` as a percent, `$5`
+  as currency, booleans as `TRUE`/`FALSE` — not serial numbers or
+  fractions. A typed date keeps the pattern it was typed in
+  (`getCellValueFormat`: `9/8/2026` displays as `09/08/2026`); a computed
+  date is ISO. An explicit cell format still wins. The engine serializes
+  typed values as the original text, so all of this survives save/reload.
+- **Error explanations.** Error cells render in the error colour with a
+  tooltip, and the formula bar hint shows the same text:
+  `describeCellError` translates `#NAME?` ("FOO isn't a function this
+  sheet knows…"), parse errors, `#DIV/0!`, `#REF!`, `#VALUE!`, `#CYCLE!`
+  into plain language, falling back to the engine's message.
+
+### Engine configuration (`createEngine`)
+
+- `dateFormats`: `MM/DD/YYYY`, `YYYY-MM-DD`, `DD/MM/YYYY`, `MM/DD/YY` —
+  the engine's day-first default turned `9/8/2026` into 9 August while
+  the plugin displays in `en-US`, and ISO dates didn't parse at all.
+- `TRUE`/`FALSE` registered as global named expressions — the engine only
+  knew `TRUE()`/`FALSE()`, so `=IF(A1>2,TRUE,FALSE)` was `#NAME?`. The
+  names are reserved (`isValidNamedRangeName`, `BUILTIN_NAMED_EXPRESSIONS`).
+- `normalizeRawInput` strips thousands separators from `1,234.50` and
+  `$1,234.50` so they store as a number / currency instead of text.
+
+### FINANCE()
+
+- The function is **volatile**; after a fetch the engine re-evaluates
+  via `suspendEvaluation`/`resumeEvaluation`, which keeps undo/redo —
+  `rebuildAndRecalculate` (used before) cleared both stacks on every rate
+  fetch.
+- `getFinanceRatesAction` returns `{ error: 'unsupported' }` for a pair
+  the provider doesn't offer (the cell then reads "USD/XXX isn't
+  available from the exchange-rate provider") and `{ error:
+  'unavailable' }` when the provider couldn't be reached, which is
+  retried after `FINANCE_RETRY_MS` instead of waiting for the next edit.
+
+### Verified as already fine
+
+Lowercase function names normalize, floating-point results are rounded
+by the engine (`0.1+0.2` → `0.3`), cross-sheet references work, and
+XLOOKUP/FILTER/UNIQUE/SORT/TEXTJOIN/SEQUENCE are all present.
+
 ## Manifest & permissions
 
 ```json
@@ -1968,6 +2040,6 @@ generation, `_lib/ids.ts` — same convention as the Docs plugin's own),
   task 13's native JSON export/import; see "Full-workbook JSON
   export/import" above for the cost/fidelity tradeoffs that decided it.
 - Filter views, text wrapping, cell borders, merged cells, column
-  virtualization, function autocomplete in the formula bar — task 32
-  shipped sort, alignment, freeze panes, find/replace and autofill; these
-  are the next slice.
+  virtualization — task 32 shipped sort, alignment, freeze panes,
+  find/replace and autofill, task 33 added function autocomplete and
+  point mode; these are the next slice.

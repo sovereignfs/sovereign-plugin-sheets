@@ -8,9 +8,11 @@ import {
   useRef,
   useState,
   type ClipboardEvent as ReactClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   type Ref,
 } from 'react';
-import type { HyperFormula } from 'hyperformula';
+import { HyperFormula } from 'hyperformula';
 import {
   Button,
   ColorPicker,
@@ -50,7 +52,16 @@ import {
   rowHeightForFontSize,
 } from '../_lib/config';
 import { cellsToCsv, cellsToTsv, downloadCsv, parseClipboardText, parseCsv } from '../_lib/csv';
-import { displayValue } from '../_lib/formula-engine';
+import { describeCellError, displayValue, isFormulaError } from '../_lib/formula-engine';
+import {
+  acceptFunctionSuggestion,
+  functionContextAt,
+  functionQueryAt,
+  insertReference,
+  referenceInsertionRange,
+  suggestFunctions,
+  type ReferenceSpan,
+} from '../_lib/formula-editing';
 import { extractFinancePairs, getCachedRate } from '../_lib/finance-function';
 import { formatCellValue } from '../_lib/format';
 import type { CellBounds, SheetOps } from '../_lib/sheet-ops';
@@ -58,6 +69,7 @@ import { isCellValueValid, validationRulesEqual } from '../_lib/validation';
 import { CellValidationDialog } from './CellValidationDialog';
 import { FindReplacePopover } from './FindReplacePopover';
 import { FormulaBar } from './FormulaBar';
+import { ArgumentHint, FunctionSuggestions } from './FunctionHints';
 import { NamedRangesButton, type NamedRangeItem } from './NamedRangesDialog';
 import styles from './SheetGrid.module.css';
 
@@ -88,6 +100,27 @@ export interface SheetGridHandle {
 }
 
 type ContextTarget = { kind: 'cell' } | { kind: 'row' } | { kind: 'col' };
+
+/** Which text field a formula draft lives in: the cell's own input, or the formula bar. */
+type DraftSurface = 'cell' | 'bar';
+
+/** A reference inserted by point mode: its span in the draft plus the cells it names, so a drag or Shift+Arrow can extend it. */
+interface PointedReference extends ReferenceSpan {
+  surface: DraftSurface;
+  anchor: CellAddress;
+  focus: CellAddress;
+}
+
+const ARROW_DELTAS: Record<string, [number, number]> = {
+  ArrowUp: [-1, 0],
+  ArrowDown: [1, 0],
+  ArrowLeft: [0, -1],
+  ArrowRight: [0, 1],
+};
+
+const REGISTERED_FUNCTION_NAMES: readonly string[] = [
+  ...new Set([...HyperFormula.getRegisteredFunctionNames('enGB'), 'FINANCE', 'TRUE', 'FALSE']),
+].sort();
 
 function boundsOf(a: CellAddress, b: CellAddress): CellBounds {
   return {
@@ -234,6 +267,28 @@ export function SheetGrid({
   // it is one of our own copies, so the engine-internal clipboard (formulas,
   // translated references, formatting) is used instead of parsing text.
   const lastCopiedText = useRef<string | null>(null);
+  // The formula bar's draft lives here, not in FormulaBar, so point mode
+  // and autocomplete can edit it. `null` while the bar isn't focused. The
+  // ref mirrors it for handlers that run before React re-renders (a cell
+  // mousedown while the bar is focused).
+  const [barDraft, setBarDraftState] = useState<string | null>(null);
+  const barDraftRef = useRef<string | null>(null);
+  function setBarDraft(next: string | null) {
+    barDraftRef.current = next;
+    setBarDraftState(next);
+  }
+  const barRef = useRef<HTMLTextAreaElement>(null);
+  // Caret position in whichever surface is being edited — drives the
+  // autocomplete list and the argument hint.
+  const [caret, setCaret] = useState(0);
+  // Point mode: the reference the last click/arrow inserted, so the next
+  // one replaces it (and a drag or Shift+Arrow extends it to a range).
+  const [pointed, setPointed] = useState<PointedReference | null>(null);
+  const [pointDrag, setPointDrag] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  // Where to put the caret after a programmatic draft edit, once React has
+  // rendered the new text into the field.
+  const pendingCaret = useRef<{ surface: DraftSurface; caret: number } | null>(null);
 
   const activeCell = selectionAnchor;
   const selectionBounds = selectionAnchor && selectionFocus ? boundsOf(selectionAnchor, selectionFocus) : null;
@@ -358,10 +413,27 @@ export function SheetGrid({
     }
   }, [editing]);
 
+  // Restore the caret after point mode / autocomplete rewrote the draft.
+  useEffect(() => {
+    const target = pendingCaret.current;
+    if (!target) return;
+    const el =
+      target.surface === 'bar'
+        ? barRef.current
+        : editingRef.current
+          ? inputRefs.current.get(cellKey(editingRef.current.row, editingRef.current.col))
+          : null;
+    if (el) {
+      pendingCaret.current = null;
+      el.setSelectionRange(target.caret, target.caret);
+    }
+  });
+
   // Ends a drag regardless of where the mouse button is released.
   useEffect(() => {
     function handleGlobalMouseUp() {
       setDragging(false);
+      setPointDrag(false);
       setFillDrag((current) => {
         if (current) completeFill(current.target);
         return null;
@@ -431,8 +503,21 @@ export function SheetGrid({
     return value === null || value === undefined ? '' : String(value);
   }
 
-  function getDisplay(meta: CellMetadata | undefined, value: unknown): string {
-    return formatCellValue(displayValue(value), meta?.fmt, value, engine, meta?.currency);
+  function getDisplay(
+    meta: CellMetadata | undefined,
+    value: unknown,
+    detailedType?: string,
+    valueFormat?: string,
+  ): string {
+    return formatCellValue(
+      displayValue(value),
+      meta?.fmt,
+      value,
+      engine,
+      meta?.currency,
+      detailedType,
+      valueFormat,
+    );
   }
 
   function startEditing(row: number, col: number, replaceWith?: string) {
@@ -445,6 +530,7 @@ export function SheetGrid({
     const current = editingRef.current;
     if (!current) return;
     setEditing(null);
+    setPointed(null);
     if (current.draft !== getRawInput(current.row, current.col)) {
       ops.commitCell(current.row, current.col, current.draft);
     }
@@ -452,6 +538,7 @@ export function SheetGrid({
 
   function cancelEditing() {
     setEditing(null);
+    setPointed(null);
   }
 
   /** Formula-bar commit — targets the cell the bar was opened on, not whatever is active by the time blur fires. */
@@ -459,6 +546,165 @@ export function SheetGrid({
     const target = formulaBarTarget.current ?? activeCell;
     if (!target) return;
     if (value !== getRawInput(target.row, target.col)) ops.commitCell(target.row, target.col, value);
+  }
+
+  // ---------------------------------------------------------------------
+  // Formula drafts — point mode and autocomplete, shared by the cell input
+  // and the formula bar.
+  // ---------------------------------------------------------------------
+  /** Whichever formula draft is being typed right now, or null. */
+  function activeDraft(): { surface: DraftSurface; text: string; cell: CellAddress } | null {
+    if (barDraftRef.current !== null) {
+      const cell = formulaBarTarget.current ?? activeCell;
+      return cell ? { surface: 'bar', text: barDraftRef.current, cell } : null;
+    }
+    const current = editingRef.current;
+    if (current) return { surface: 'cell', text: current.draft, cell: { row: current.row, col: current.col } };
+    return null;
+  }
+
+  function currentCaret(surface: DraftSurface): number {
+    const el =
+      surface === 'bar'
+        ? barRef.current
+        : editingRef.current
+          ? inputRefs.current.get(cellKey(editingRef.current.row, editingRef.current.col))
+          : null;
+    return el?.selectionStart ?? caret;
+  }
+
+  function setDraftText(surface: DraftSurface, cell: CellAddress, text: string, nextCaret: number) {
+    if (surface === 'bar') setBarDraft(text);
+    else setEditing({ row: cell.row, col: cell.col, draft: text });
+    pendingCaret.current = { surface, caret: nextCaret };
+    setCaret(nextCaret);
+  }
+
+  /**
+   * Point mode: while a formula is being typed and the caret follows `=`,
+   * an operator, `(` or `,`, clicking or arrowing to a cell inserts its
+   * reference instead of committing the half-typed formula. Returns false
+   * when the draft can't take a reference here, so the caller falls back
+   * to the normal click/arrow behaviour.
+   */
+  function tryPointReference(target: CellAddress, extend: boolean, labelOverride?: string): boolean {
+    if (!canEdit) return false;
+    const draft = activeDraft();
+    if (!draft) return false;
+    const span = pointed && pointed.surface === draft.surface ? pointed : null;
+    const range = referenceInsertionRange(draft.text, currentCaret(draft.surface), span);
+    if (!range) return false;
+    const anchor = extend && span ? span.anchor : target;
+    const bounds = boundsOf(anchor, target);
+    const label = labelOverride ?? rangeLabel(bounds.minRow, bounds.minCol, bounds.maxRow, bounds.maxCol);
+    const result = insertReference(draft.text, range, label);
+    setDraftText(draft.surface, draft.cell, result.text, result.caret);
+    setPointed({ ...result.span, surface: draft.surface, anchor, focus: target });
+    return true;
+  }
+
+  /** Point mode on a header: a whole column (`B:B`) or row (`3:3`) reference. */
+  function tryPointHeaderReference(e: React.MouseEvent, axis: 'row' | 'col', index: number): boolean {
+    if (e.button === 2) return false;
+    const draft = activeDraft();
+    if (!draft) return false;
+    const label = axis === 'col' ? `${colIndexToLetters(index)}:${colIndexToLetters(index)}` : `${String(index + 1)}:${String(index + 1)}`;
+    const target = axis === 'col' ? { row: 0, col: index } : { row: index, col: 0 };
+    if (!tryPointReference(target, false, label)) return false;
+    e.preventDefault();
+    return true;
+  }
+
+  function movePointReference(deltaRow: number, deltaCol: number, extend: boolean): boolean {
+    const draft = activeDraft();
+    if (!draft) return false;
+    const span = pointed && pointed.surface === draft.surface ? pointed : null;
+    if (!referenceInsertionRange(draft.text, currentCaret(draft.surface), span)) return false;
+    const base = span ? span.focus : draft.cell;
+    return tryPointReference(clampAddress(base.row + deltaRow, base.col + deltaCol), extend);
+  }
+
+  const draftText = barDraft !== null ? barDraft : (editing?.draft ?? null);
+  const functionQuery = draftText !== null ? functionQueryAt(draftText, caret) : null;
+  const suggestions = functionQuery ? suggestFunctions(functionQuery.query, REGISTERED_FUNCTION_NAMES) : [];
+  const selectedSuggestion = Math.min(suggestionIndex, Math.max(0, suggestions.length - 1));
+  const functionContext = draftText !== null && !functionQuery ? functionContextAt(draftText, caret) : null;
+
+  function acceptSuggestion(name: string) {
+    const draft = activeDraft();
+    if (!draft) return;
+    const query = functionQueryAt(draft.text, currentCaret(draft.surface));
+    if (!query) return;
+    const result = acceptFunctionSuggestion(draft.text, query, name);
+    setDraftText(draft.surface, draft.cell, result.text, result.caret);
+    setPointed(null);
+    setSuggestionIndex(0);
+  }
+
+  /** Keys that belong to the draft itself (autocomplete, point mode) on either surface. True when handled. */
+  function handleDraftKeyDown(e: ReactKeyboardEvent<HTMLElement>): boolean {
+    if (e.metaKey || e.ctrlKey || e.altKey) return false;
+    if (suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSuggestionIndex((selectedSuggestion + 1) % suggestions.length);
+        return true;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSuggestionIndex((selectedSuggestion - 1 + suggestions.length) % suggestions.length);
+        return true;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        const pick = suggestions[selectedSuggestion];
+        if (pick) {
+          e.preventDefault();
+          acceptSuggestion(pick.name);
+          return true;
+        }
+      }
+    }
+    const delta = ARROW_DELTAS[e.key];
+    if (delta && movePointReference(delta[0], delta[1], e.shiftKey)) {
+      e.preventDefault();
+      return true;
+    }
+    return false;
+  }
+
+  function handleBarFocus(element: HTMLTextAreaElement) {
+    barRef.current = element;
+    formulaBarTarget.current = activeCell;
+    const text = activeCell ? getRawInput(activeCell.row, activeCell.col) : '';
+    setBarDraft(text);
+    setCaret(barRef.current?.selectionStart ?? text.length);
+  }
+
+  function handleBarBlur() {
+    const text = barDraftRef.current;
+    setBarDraft(null);
+    setPointed(null);
+    if (text !== null && canEdit) commitFromFormulaBar(text);
+  }
+
+  /** Enter/Escape in the bar hand focus back to the cell so keyboard navigation keeps working. */
+  function handleBarKeyDown(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (handleDraftKeyDown(e)) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const text = barDraftRef.current;
+      const target = formulaBarTarget.current ?? activeCell;
+      setBarDraft(null);
+      setPointed(null);
+      if (text !== null && canEdit) commitFromFormulaBar(text);
+      if (target) focusCell(target.row, target.col);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      const target = formulaBarTarget.current ?? activeCell;
+      setBarDraft(null);
+      setPointed(null);
+      if (target) focusCell(target.row, target.col);
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -472,7 +718,13 @@ export function SheetGrid({
       const line: string[] = [];
       for (let c = bounds.minCol; c <= bounds.maxCol; c++) {
         const value = engine.getCellValue({ sheet: hfSheetId, row: r, col: c });
-        line.push(getDisplay(cellMetadata[cellKey(r, c)], value));
+        line.push(
+          getDisplay(
+            cellMetadata[cellKey(r, c)],
+            value,
+            engine.getCellValueDetailedType({ sheet: hfSheetId, row: r, col: c }),
+          ),
+        );
       }
       rows.push(line);
     }
@@ -572,7 +824,14 @@ export function SheetGrid({
   // Mouse
   // ---------------------------------------------------------------------
   function handleCellMouseDown(e: React.MouseEvent<HTMLInputElement>, row: number, col: number) {
-    if (editing && (editing.row !== row || editing.col !== col)) commitEditing();
+    const editingElsewhere = !!editing && (editing.row !== row || editing.col !== col);
+    if (e.button !== 2 && (editingElsewhere || barDraftRef.current !== null) && tryPointReference({ row, col }, e.shiftKey)) {
+      // Keep focus in the field being typed into — the reference went there.
+      e.preventDefault();
+      setPointDrag(true);
+      return;
+    }
+    if (editingElsewhere) commitEditing();
     if (e.button === 2) {
       // Right-click: keep an existing selection that contains the cell.
       const inside =
@@ -594,7 +853,8 @@ export function SheetGrid({
   }
 
   function handleCellMouseEnter(row: number, col: number) {
-    if (fillDrag) setFillDrag({ target: { row, col } });
+    if (pointDrag) tryPointReference({ row, col }, true);
+    else if (fillDrag) setFillDrag({ target: { row, col } });
     else if (dragging) setSelectionFocus({ row, col });
   }
 
@@ -608,6 +868,7 @@ export function SheetGrid({
   }
 
   function handleColHeaderMouseDown(e: React.MouseEvent, col: number) {
+    if (tryPointHeaderReference(e, 'col', col)) return;
     if (editing) commitEditing();
     setContextTarget({ kind: 'col' });
     if (e.button === 2 && selectionBounds && col >= selectionBounds.minCol && col <= selectionBounds.maxCol) return;
@@ -619,6 +880,7 @@ export function SheetGrid({
   }
 
   function handleRowHeaderMouseDown(e: React.MouseEvent, row: number) {
+    if (tryPointHeaderReference(e, 'row', row)) return;
     if (editing) commitEditing();
     setContextTarget({ kind: 'row' });
     if (e.button === 2 && selectionBounds && row >= selectionBounds.minRow && row <= selectionBounds.maxRow) return;
@@ -687,7 +949,9 @@ export function SheetGrid({
     const key = e.key.toLowerCase();
 
     if (mod && !e.altKey) {
-      if (isEditingThis && (key === 'c' || key === 'x' || key === 'v' || key === 'a')) return; // native text editing
+      // Native text editing inside the cell — including the input's own
+      // undo/redo of typed characters, which is not the sheet's undo.
+      if (isEditingThis && ['c', 'x', 'v', 'a', 'z', 'y'].includes(key)) return;
       switch (key) {
         case 'c':
           e.preventDefault();
@@ -799,6 +1063,10 @@ export function SheetGrid({
       e.preventDefault();
       cancelEditing();
       return;
+    } else if (handleDraftKeyDown(e)) {
+      return;
+    } else if (e.shiftKey && e.key in ARROW_DELTAS) {
+      return; // Shift+Arrow while editing selects text inside the cell
     }
 
     const input = e.currentTarget;
@@ -1109,16 +1377,29 @@ export function SheetGrid({
       })()
     : undefined;
 
-  const financeHint = (() => {
+  const barHint: ReactNode = (() => {
+    if (suggestions.length > 0) {
+      return (
+        <FunctionSuggestions suggestions={suggestions} selectedIndex={selectedSuggestion} onPick={acceptSuggestion} />
+      );
+    }
+    if (functionContext) return <ArgumentHint context={functionContext} />;
     if (!activeCell) return undefined;
+    const value = engine.getCellValue({ sheet: hfSheetId, row: activeCell.row, col: activeCell.col });
+    if (isFormulaError(value)) return describeCellError(value);
     const pairs = extractFinancePairs(getRawInput(activeCell.row, activeCell.col));
     const first = pairs[0];
     if (!first) return undefined;
     const cached = getCachedRate(first.base, first.quote);
-    if (!cached) return 'Loading exchange rate…';
+    if (!cached) return undefined;
     const date = new Date(cached.asOf * 1000).toISOString().slice(0, 10);
     return `${first.base}/${first.quote} rate as of ${date} (ECB reference rate via Frankfurter)`;
   })();
+
+  const pointedBounds =
+    pointed && (barDraft !== null ? pointed.surface === 'bar' : pointed.surface === 'cell')
+      ? boundsOf(pointed.anchor, pointed.focus)
+      : null;
 
   // ---------------------------------------------------------------------
   // Render helpers
@@ -1128,8 +1409,17 @@ export function SheetGrid({
     const isEditingThis = !!editing && editing.row === row && editing.col === col;
     const meta = cellMetadata[key];
     const value = engine.getCellValue({ sheet: hfSheetId, row, col });
+    const isError = isFormulaError(value);
+    const detailedType = isError ? undefined : engine.getCellValueDetailedType({ sheet: hfSheetId, row, col });
+    const valueFormat = detailedType === 'NUMBER_DATE' ? engine.getCellValueFormat({ sheet: hfSheetId, row, col }) : undefined;
     const valid = isCellValueValid(value, meta?.validation);
     const isActive = !!activeCell && activeCell.row === row && activeCell.col === col;
+    const inPointed =
+      !!pointedBounds &&
+      row >= pointedBounds.minRow &&
+      row <= pointedBounds.maxRow &&
+      col >= pointedBounds.minCol &&
+      col <= pointedBounds.maxCol;
     const inSelection =
       !!selectionBounds &&
       row >= selectionBounds.minRow &&
@@ -1152,6 +1442,7 @@ export function SheetGrid({
       inSelection && isMultiSelection && selectionBounds?.minCol === col && styles.edgeLeft,
       inSelection && isMultiSelection && selectionBounds?.maxCol === col && styles.edgeRight,
       inFill && styles.fillPreview,
+      inPointed && styles.pointedReference,
     ]
       .filter(Boolean)
       .join(' ');
@@ -1160,6 +1451,7 @@ export function SheetGrid({
       meta?.style?.bold && styles.cellInputBold,
       meta?.style?.italic && styles.cellInputItalic,
       !valid && styles.invalid,
+      isError && styles.cellInputError,
       isEditingThis && styles.cellInputEditing,
     ]
       .filter(Boolean)
@@ -1187,8 +1479,9 @@ export function SheetGrid({
             height,
             textAlign: align,
           }}
-          value={isEditingThis ? editing.draft : getDisplay(meta, value)}
+          value={isEditingThis ? editing.draft : getDisplay(meta, value, detailedType, valueFormat)}
           readOnly={!isEditingThis}
+          title={isError ? describeCellError(value) : undefined}
           tabIndex={isActive || (!activeCell && row === 0 && col === 0) ? 0 : -1}
           onMouseDown={(e) => handleCellMouseDown(e, row, col)}
           onMouseEnter={() => handleCellMouseEnter(row, col)}
@@ -1199,7 +1492,14 @@ export function SheetGrid({
           }}
           onDoubleClick={() => startEditing(row, col)}
           onChange={(e) => {
-            if (isEditingThis) setEditing({ row, col, draft: e.target.value });
+            if (!isEditingThis) return;
+            setEditing({ row, col, draft: e.target.value });
+            setCaret(e.target.selectionStart ?? e.target.value.length);
+            setPointed(null);
+            setSuggestionIndex(0);
+          }}
+          onSelect={(e) => {
+            if (isEditingThis) setCaret(e.currentTarget.selectionStart ?? 0);
           }}
           onKeyDown={(e) => handleKeyDown(e, row, col)}
           aria-label={key}
@@ -1277,13 +1577,20 @@ export function SheetGrid({
       <FormulaBar
         cellLabel={selectionBounds ? rangeLabel(selectionBounds.minRow, selectionBounds.minCol, selectionBounds.maxRow, selectionBounds.maxCol) : ''}
         value={activeCell ? (editing && editing.row === activeCell.row && editing.col === activeCell.col ? editing.draft : getRawInput(activeCell.row, activeCell.col)) : ''}
+        draft={barDraft}
         disabled={!activeCell}
         readOnly={!canEdit}
-        hint={financeHint}
-        onFocus={() => {
-          formulaBarTarget.current = activeCell;
+        hint={barHint}
+        onDraftChange={(next, nextCaret) => {
+          setBarDraft(next);
+          setCaret(nextCaret);
+          setPointed(null);
+          setSuggestionIndex(0);
         }}
-        onCommit={commitFromFormulaBar}
+        onCaretChange={setCaret}
+        onFocus={handleBarFocus}
+        onBlur={handleBarBlur}
+        onKeyDown={handleBarKeyDown}
       />
 
       <div className={styles.toolbar} role="toolbar" aria-label="Sheet actions">

@@ -1,38 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import type { FocusEvent, KeyboardEvent, ReactNode } from 'react';
 import { CodeTextarea } from '@sovereignfs/ui';
 import styles from './FormulaBar.module.css';
 
 export function FormulaBar({
   cellLabel,
   value,
+  draft,
   disabled,
   readOnly = false,
   hint,
+  onDraftChange,
+  onCaretChange,
   onFocus,
-  onCommit,
+  onBlur,
+  onKeyDown,
 }: {
   cellLabel: string;
+  /** The active cell's raw input, shown while the bar isn't being edited. */
   value: string;
+  /** The in-progress text while the bar is focused; `null` when it isn't. Owned by the grid so point mode and autocomplete can edit it. */
+  draft: string | null;
   disabled: boolean;
-  /** Viewer role: content stays visible/selectable, but Enter/blur never commit. */
+  /** Viewer role: content stays visible/selectable, but nothing commits. */
   readOnly?: boolean;
-  /** Muted caption under the input — e.g. the reference date of a FINANCE() rate. */
-  hint?: string;
-  /** Fires when editing starts here, so the grid can pin which cell a later blur-commit targets. */
-  onFocus?: () => void;
-  onCommit: (value: string) => void;
+  /** Caption under the input — an argument hint while editing, an error explanation or a FINANCE rate date otherwise. */
+  hint?: ReactNode;
+  onDraftChange: (next: string, caret: number) => void;
+  onCaretChange: (caret: number) => void;
+  /** Receives the textarea element so the grid can read and place its caret (the design-system textarea takes no ref). */
+  onFocus: (element: HTMLTextAreaElement) => void;
+  onBlur: () => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
-  const [draft, setDraft] = useState(value);
-  const [focused, setFocused] = useState(false);
-
-  // Follow the active cell while the bar isn't being typed into — never
-  // clobber an in-progress draft with a re-render from elsewhere.
-  useEffect(() => {
-    if (!focused) setDraft(value);
-  }, [value, cellLabel, focused]);
-
   return (
     <div className={styles.bar}>
       <div className={styles.row}>
@@ -40,34 +41,21 @@ export function FormulaBar({
         <CodeTextarea
           rows={1}
           className={styles.input}
-          value={draft}
+          value={draft ?? value}
           disabled={disabled}
           readOnly={readOnly}
-          onChange={(e) => setDraft(e.target.value)}
-          onFocus={() => {
-            setFocused(true);
-            onFocus?.();
-          }}
-          onBlur={() => {
-            setFocused(false);
-            if (!readOnly && draft !== value) onCommit(draft);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              if (!readOnly) onCommit(draft);
-              e.currentTarget.blur();
-            } else if (e.key === 'Escape') {
-              e.preventDefault();
-              setDraft(value);
-              e.currentTarget.blur();
-            }
-          }}
+          onChange={(e) => onDraftChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+          onSelect={(e) => onCaretChange(e.currentTarget.selectionStart ?? 0)}
+          onKeyUp={(e) => onCaretChange(e.currentTarget.selectionStart ?? 0)}
+          onClick={(e) => onCaretChange(e.currentTarget.selectionStart ?? 0)}
+          onFocus={(e: FocusEvent<HTMLTextAreaElement>) => onFocus(e.currentTarget)}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
           aria-label="Formula bar"
           placeholder={disabled ? 'Select a cell to edit' : ''}
         />
       </div>
-      {hint ? <p className={styles.hint}>{hint}</p> : null}
+      {hint ? <div className={styles.hint}>{hint}</div> : null}
     </div>
   );
 }

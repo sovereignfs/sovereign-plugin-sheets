@@ -18,9 +18,13 @@ import {
  * call that finds no cached rate records its pair in `pendingPairs`, and
  * `WorkbookView` drains that set after each recalculation, fetches, and
  * recalculates again. That covers arguments that come from cell references
- * (`=FINANCE(A1, B1)`) and named ranges — a regex over formula text (the
- * earlier approach) could only see string literals, leaving everything else
- * stuck on `#N/A` forever.
+ * (`=FINANCE(A1, B1)`) and named ranges — a regex over formula text could
+ * only see string literals.
+ *
+ * The function is declared *volatile*, so once a rate lands the engine
+ * re-evaluates every FINANCE cell on the next evaluation pass
+ * (`suspendEvaluation`/`resumeEvaluation`) — no `rebuildAndRecalculate`,
+ * which would wipe the undo history.
  */
 
 export interface CachedRate {
@@ -31,6 +35,8 @@ export interface CachedRate {
 
 const rateStore = new Map<string, CachedRate>();
 const pendingPairs = new Map<string, { base: string; quote: string }>();
+/** Pairs the provider told us it doesn't offer — the function reports that instead of "loading" forever. */
+const unavailablePairs = new Map<string, string>();
 
 const CURRENCY_CODE_RE = /^[A-Z]{3}$/;
 
@@ -43,8 +49,16 @@ export function isCurrencyCode(value: string): boolean {
 }
 
 export function setCachedRate(base: string, quote: string, rate: number, asOf: number): void {
-  rateStore.set(pairKey(base, quote), { rate, asOf });
-  pendingPairs.delete(pairKey(base, quote));
+  const key = pairKey(base, quote);
+  rateStore.set(key, { rate, asOf });
+  pendingPairs.delete(key);
+  unavailablePairs.delete(key);
+}
+
+export function markPairUnavailable(base: string, quote: string, reason: string): void {
+  const key = pairKey(base, quote);
+  unavailablePairs.set(key, reason);
+  pendingPairs.delete(key);
 }
 
 export function getCachedRate(base: string, quote: string): CachedRate | undefined {
@@ -58,7 +72,7 @@ export function drainPendingFinancePairs(): { base: string; quote: string }[] {
   return pairs;
 }
 
-/** Distinct (base, quote) string-literal pairs in a raw formula — used to prefetch before the first render. */
+/** Distinct (base, quote) string-literal pairs in a raw formula — used for the formula bar's rate-date hint. */
 export function extractFinancePairs(formula: string): { base: string; quote: string }[] {
   const pairs: { base: string; quote: string }[] = [];
   const re = /FINANCE\(\s*"([A-Za-z]{3})"\s*,\s*"([A-Za-z]{3})"\s*\)/gi;
@@ -71,11 +85,14 @@ export function extractFinancePairs(formula: string): { base: string; quote: str
   return pairs;
 }
 
+export const FINANCE_LOADING_MESSAGE = 'Fetching the exchange rate…';
+
 // HyperFormula doesn't export ProcedureAst/InterpreterState from its package root.
 class FinanceFunctionPlugin extends FunctionPlugin {
   static override implementedFunctions = {
     FINANCE: {
       method: 'finance',
+      isVolatile: true,
       parameters: [
         { argumentType: FunctionArgumentType.STRING },
         { argumentType: FunctionArgumentType.STRING },
@@ -89,13 +106,16 @@ class FinanceFunctionPlugin extends FunctionPlugin {
       const b = base.trim().toUpperCase();
       const q = quote.trim().toUpperCase();
       if (!isCurrencyCode(b) || !isCurrencyCode(q)) {
-        return new CellError(ErrorType.VALUE, 'Use a 3-letter currency code, e.g. "USD"');
+        return new CellError(ErrorType.VALUE, 'Use 3-letter currency codes, for example FINANCE("USD","EUR").');
       }
       if (b === q) return 1;
-      const cached = rateStore.get(pairKey(b, q));
+      const key = pairKey(b, q);
+      const cached = rateStore.get(key);
       if (cached) return cached.rate;
-      pendingPairs.set(pairKey(b, q), { base: b, quote: q });
-      return new CellError(ErrorType.NA, 'Loading rate…');
+      const unavailable = unavailablePairs.get(key);
+      if (unavailable) return new CellError(ErrorType.NA, unavailable);
+      pendingPairs.set(key, { base: b, quote: q });
+      return new CellError(ErrorType.NA, FINANCE_LOADING_MESSAGE);
     });
   }
 }

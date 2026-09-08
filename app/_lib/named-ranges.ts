@@ -13,9 +13,11 @@ export type NamedRangesMap = Record<string, string>;
 /** HyperFormula's own naming rule: a letter or underscore, then letters/digits/underscores/periods, and not something that parses as a cell reference. */
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_.]{0,254}$/;
 const LOOKS_LIKE_CELL_REF = /^[A-Za-z]{1,3}[0-9]+$/;
+/** Reserved by the engine setup (`formula-engine.ts`) so `=IF(…, TRUE, FALSE)` works — never a user's name. */
+const RESERVED_NAMES = new Set(['TRUE', 'FALSE']);
 
 export function isValidNamedRangeName(name: string): boolean {
-  return NAME_RE.test(name) && !LOOKS_LIKE_CELL_REF.test(name);
+  return NAME_RE.test(name) && !LOOKS_LIKE_CELL_REF.test(name) && !RESERVED_NAMES.has(name.toUpperCase());
 }
 
 export function sanitizeNamedRanges(parsed: unknown): NamedRangesMap {

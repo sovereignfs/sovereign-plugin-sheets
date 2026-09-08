@@ -43,11 +43,18 @@ import {
   AUTOSAVE_DELAY_MS,
   DEFAULT_COL_COUNT,
   DEFAULT_ROW_COUNT,
+  FINANCE_RETRY_MS,
   MAX_COL_COUNT,
   MAX_ROW_COUNT,
   WORKBOOK_REFRESH_POLL_MS,
 } from '../_lib/config';
-import { cellsMapToGrid, createEngine, gridToCellsMap, normalizeRawInput } from '../_lib/formula-engine';
+import {
+  BUILTIN_NAMED_EXPRESSIONS,
+  cellsMapToGrid,
+  createEngine,
+  gridToCellsMap,
+  normalizeRawInput,
+} from '../_lib/formula-engine';
 import {
   compactMetadata,
   extractCellMetadata,
@@ -67,7 +74,12 @@ import {
   shiftColumnWidths,
   type ColumnWidthsMap,
 } from '../_lib/column-widths';
-import { drainPendingFinancePairs, pairKey, setCachedRate } from '../_lib/finance-function';
+import {
+  drainPendingFinancePairs,
+  markPairUnavailable,
+  pairKey,
+  setCachedRate,
+} from '../_lib/finance-function';
 import { parseNamedRangesJson, sanitizeNamedRanges, type NamedRangesMap } from '../_lib/named-ranges';
 import { validateSheetName } from '../_lib/sheet-names';
 import type { SheetOps } from '../_lib/sheet-ops';
@@ -197,6 +209,7 @@ export function WorkbookView({
       // After every sheet exists — a named expression referencing a sheet
       // (e.g. "=Sheet1!$B$2") throws if that sheet isn't registered yet.
       for (const [expressionName, expression] of Object.entries(parseNamedRangesJson(namedRangesJson))) {
+        if (BUILTIN_NAMED_EXPRESSIONS.has(expressionName.toUpperCase())) continue;
         try {
           engine.addNamedExpression(expressionName, expression);
         } catch {
@@ -416,10 +429,21 @@ export function WorkbookView({
   }, [workbookId, workbookName, namedRanges, onRemoteChange, refreshSaveState]);
 
   // FINANCE(): after every recalculation, fetch whatever rates the function
-  // asked for and didn't have, then recalculate once more. Pairs that came
-  // back unknown are remembered so an unsupported code doesn't refetch on
-  // every keystroke; a new cell commit clears that memory.
+  // asked for and didn't have, then let the engine re-evaluate — FINANCE is
+  // volatile, so a suspend/resume pass recomputes every FINANCE cell without
+  // touching the undo history (`rebuildAndRecalculate` would clear it).
+  // A pair the provider doesn't offer is marked unavailable, so its cell
+  // says so instead of "fetching" forever; a pair that couldn't be fetched
+  // (provider down) is retried on a timer.
   const failedPairs = useRef<Set<string>>(new Set());
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recalculateFinance = useCallback(() => {
+    const current = engineRef.current;
+    if (!current) return;
+    current.suspendEvaluation();
+    current.resumeEvaluation();
+    setVersion((v) => v + 1);
+  }, []);
   useEffect(() => {
     if (!engine) return;
     const pending = drainPendingFinancePairs().filter(
@@ -429,33 +453,51 @@ export function WorkbookView({
     let cancelled = false;
     void (async () => {
       let results: Awaited<ReturnType<typeof getFinanceRatesAction>>;
+      let changed = false;
+      let transientFailure = false;
       try {
         results = await getFinanceRatesAction(pending);
       } catch {
-        for (const pair of pending) failedPairs.current.add(pairKey(pair.base, pair.quote));
-        return;
+        results = {};
       }
       if (cancelled) return;
-      let changed = false;
       for (const pair of pending) {
         const key = pairKey(pair.base, pair.quote);
         const value = results[key];
-        if (value) {
+        if (value && 'rate' in value) {
           setCachedRate(pair.base, pair.quote, value.rate, value.asOf);
+          changed = true;
+        } else if (value && value.error === 'unsupported') {
+          markPairUnavailable(
+            pair.base,
+            pair.quote,
+            `${pair.base}/${pair.quote} isn't available from the exchange-rate provider.`,
+          );
           changed = true;
         } else {
           failedPairs.current.add(key);
+          transientFailure = true;
         }
       }
-      if (changed && engineRef.current) {
-        engineRef.current.rebuildAndRecalculate();
-        bump();
+      if (changed) recalculateFinance();
+      if (transientFailure && retryTimer.current === null) {
+        retryTimer.current = setTimeout(() => {
+          retryTimer.current = null;
+          failedPairs.current.clear();
+          recalculateFinance();
+        }, FINANCE_RETRY_MS);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [engine, version]);
+  }, [engine, version, recalculateFinance]);
+  useEffect(
+    () => () => {
+      if (retryTimer.current !== null) clearTimeout(retryTimer.current);
+    },
+    [],
+  );
 
   // ---------------------------------------------------------------------
   // Sheet structure
@@ -632,6 +674,9 @@ export function WorkbookView({
   /** Returns an error message on failure (surfaced inline by NamedRangesButton), or undefined on success. */
   function handleAddNamedRange(expressionName: string, expression: string): string | undefined {
     if (!engine) return 'Workbook is not ready yet.';
+    if (BUILTIN_NAMED_EXPRESSIONS.has(expressionName.toUpperCase())) {
+      return `${expressionName.toUpperCase()} is built in and can't be redefined.`;
+    }
     const existing = engine.getNamedExpression(expressionName);
     try {
       if (existing) engine.changeNamedExpression(expressionName, expression);
